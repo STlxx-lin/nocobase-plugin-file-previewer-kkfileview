@@ -4,7 +4,7 @@
  */
 import './appDevDepsBridge';
 import { Plugin, attachmentFileTypes } from '@nocobase/client';
-import { filePreviewTypes } from '@nocobase/plugin-file-manager/client';
+import * as fileManagerClient from '@nocobase/plugin-file-manager/client';
 import { SettingsPage } from './SettingsPage';
 import { KKFilePreviewer } from './KKFilePreviewer';
 import { kkfileviewConfig, PREVIEW_SERVICE_REGISTRY, updateConfigCache } from './configCache';
@@ -94,11 +94,14 @@ export class PluginFilePreviewerKkfileviewClient extends Plugin {
       pluginNames: [this.options?.name, this.options?.packageName, 'file-previewer-kkfileview'],
     });
 
-    attachmentFileTypes.add({
+    attachmentFileTypes?.add?.({
       match,
       Previewer: KKFilePreviewer,
     });
-    filePreviewTypes.add({
+    const fpTypes =
+      fileManagerClient?.filePreviewTypes ||
+      (window as any)?.__nocobase_app_dev_plugins__?.['@nocobase/plugin-file-manager/client']?.filePreviewTypes;
+    fpTypes?.add?.({
       match,
       Previewer: KKFilePreviewer,
     });

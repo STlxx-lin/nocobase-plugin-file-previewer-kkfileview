@@ -8,6 +8,7 @@ type RequireJsLike = {
 
 type LegacyAppDevGlobal = typeof window & {
   __nocobase_app_dev_deps__?: Record<string, unknown>;
+  __nocobase_app_dev_plugins__?: Record<string, unknown>;
   requirejs?: RequireJsLike;
 };
 
@@ -40,22 +41,47 @@ function getDefinedModules(globalObject?: Partial<LegacyAppDevGlobal>) {
 
 export function ensureLegacyAppDevDeps(globalObject?: Partial<LegacyAppDevGlobal>) {
   if (!globalObject) return {} as Record<string, unknown>;
-  if (globalObject.__nocobase_app_dev_deps__) return globalObject.__nocobase_app_dev_deps__;
 
-  const definedModules = getDefinedModules(globalObject);
-  const resolvedDeps = LEGACY_APP_DEV_DEP_ALIASES.reduce<Record<string, unknown>>((memo, [targetId, sourceId]) => {
-    if (definedModules[sourceId] !== undefined) {
-      memo[targetId] = definedModules[sourceId];
-    }
-    return memo;
-  }, {});
-
-  if (Object.keys(resolvedDeps).length === 0) {
-    return resolvedDeps;
+  if (!globalObject.__nocobase_app_dev_deps__) {
+    globalObject.__nocobase_app_dev_deps__ = {};
+  }
+  if (!globalObject.__nocobase_app_dev_plugins__) {
+    globalObject.__nocobase_app_dev_plugins__ = {};
   }
 
-  globalObject.__nocobase_app_dev_deps__ = resolvedDeps;
-  return resolvedDeps;
+  const definedModules = getDefinedModules(globalObject);
+  LEGACY_APP_DEV_DEP_ALIASES.forEach(([targetId, sourceId]) => {
+    if (definedModules[sourceId] !== undefined) {
+      if (!globalObject.__nocobase_app_dev_deps__![targetId]) {
+        globalObject.__nocobase_app_dev_deps__![targetId] = definedModules[sourceId];
+      }
+      if (!globalObject.__nocobase_app_dev_plugins__![targetId]) {
+        globalObject.__nocobase_app_dev_plugins__![targetId] = definedModules[sourceId];
+      }
+    }
+  });
+
+  // 安全兜底 @nocobase/plugin-file-manager/client，防止解构 filePreviewTypes 抛出 TypeError
+  const fmClientKey = '@nocobase/plugin-file-manager/client';
+  if (!globalObject.__nocobase_app_dev_plugins__![fmClientKey]) {
+    globalObject.__nocobase_app_dev_plugins__![fmClientKey] = {
+      filePreviewTypes: {
+        add: () => {},
+        get: () => null,
+      },
+    };
+  }
+  const fmV2ClientKey = '@nocobase/plugin-file-manager/client-v2';
+  if (!globalObject.__nocobase_app_dev_plugins__![fmV2ClientKey]) {
+    globalObject.__nocobase_app_dev_plugins__![fmV2ClientKey] = {
+      filePreviewTypes: {
+        add: () => {},
+        get: () => null,
+      },
+    };
+  }
+
+  return globalObject.__nocobase_app_dev_deps__;
 }
 
 // 旧版 `/admin` 页面不会像 modern client 那样预先注入 `__nocobase_app_dev_deps__`，这里在入口最早阶段补齐。

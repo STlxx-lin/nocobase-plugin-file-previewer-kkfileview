@@ -1,3 +1,6 @@
+/**
+ * @jsxRuntime classic
+ */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Button, Space, Typography, Radio, message, Input, Form, Select, Switch, Spin, Progress, Tooltip } from 'antd';
 import { CloseOutlined, LeftOutlined, RightOutlined, FullscreenOutlined, FullscreenExitOutlined, ExportOutlined, CodeOutlined, DownloadOutlined } from '@ant-design/icons';

@@ -1,5 +1,8 @@
+/**
+ * @jsxRuntime classic
+ */
 import { Plugin } from '@nocobase/client-v2';
-import { filePreviewTypes } from '@nocobase/plugin-file-manager/client-v2';
+import * as fileManagerClientV2 from '@nocobase/plugin-file-manager/client-v2';
 import { kkfileviewConfig, PREVIEW_SERVICE_REGISTRY, updateConfigCache } from '../client/configCache';
 import type { KkfileviewConfigRecord } from '../client/configCache';
 import { getFileExt, unwrapDataArray } from '../client/previewUtils';
@@ -83,7 +86,10 @@ export class PluginFilePreviewerKkfileviewClientV2 extends Plugin {
       pluginNames: [this.options?.name, this.options?.packageName, 'file-previewer-kkfileview'],
     });
 
-    filePreviewTypes.add({
+    const fpTypes =
+      fileManagerClientV2?.filePreviewTypes ||
+      (window as any)?.__nocobase_app_dev_plugins__?.['@nocobase/plugin-file-manager/client-v2']?.filePreviewTypes;
+    fpTypes?.add?.({
       match,
       Previewer: KKFilePreviewer,
     });

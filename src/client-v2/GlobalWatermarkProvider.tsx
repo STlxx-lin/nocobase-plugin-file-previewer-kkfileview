@@ -1,3 +1,6 @@
+/**
+ * @jsxRuntime classic
+ */
 import React, { useMemo, useRef } from 'react';
 import { Watermark } from 'antd';
 import { useCurrentUserContext } from './hooks';

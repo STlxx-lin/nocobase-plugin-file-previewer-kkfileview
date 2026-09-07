@@ -1,3 +1,6 @@
+/**
+ * @jsxRuntime classic
+ */
 import React from 'react';
 import { useAPIClient, useCurrentUserContext, useApp } from './hooks';
 import { useT } from './locale';

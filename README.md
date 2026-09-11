@@ -156,3 +156,4 @@ yarn pack-all
 
 如有任何问题、建议或功能定制需求，欢迎联系反馈：
 - **反馈 QQ**：`1414794992`
+- **GitHub Issues**：[提交 Issue / 需求反馈](https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview/issues)

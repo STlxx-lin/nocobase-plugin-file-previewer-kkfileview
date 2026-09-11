@@ -1,4 +1,4 @@
-﻿# @nocobase/plugin-file-previewer-kkfileview
+# @nocobase/plugin-file-previewer-kkfileview
 
 <p align="left">
   <b>English</b> | <a href="./README.md">简体中文</a>
@@ -153,4 +153,4 @@ If you deploy the **Lite Edition** in an isolated environment:
 
 For questions, feature requests, or custom consulting:
 - **Feedback QQ**: `1414794992`
-- **GitHub Issues**: [Open an issue](https://github.com/STlxx-lin/plugin-file-previewer-kkfileview/issues)
+- **GitHub Issues**: [Open an issue](https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview/issues)

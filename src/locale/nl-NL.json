@@ -225,5 +225,14 @@
   "CDN Mode (default, direct link)": "CDN-modus (standaard, directe link)",
   "Static Mode (local static files)": "Statische modus (lokale statische bestanden)",
   "CDN Mode (default): File Viewer loads its runtime from the public CDN. Static Mode: local static files are served first, and the mode automatically switches to CDN when no local static files exist.": "CDN-modus (standaard): File Viewer laadt zijn runtime van de publieke CDN. Statische modus: lokale statische bestanden worden eerst gebruikt en de modus schakelt automatisch naar CDN wanneer er geen lokale statische bestanden zijn.",
-  "CDN Mode (direct link)": "CDN-modus (directe link)"
+  "Watermark Opacity": "Watermerkdekking",
+  "Watermark Angle": "Watermerkhoek",
+  "Watermark Color": "Watermerkkleur",
+  "Range: 0.01 - 1.0 (default 0.18)": "Bereik: 0,01 - 1,0 (standaard 0,18)",
+  "Range: -180 to 180 (default -24)": "Bereik: -180 tot 180 (standaard -24)",
+  "e.g. rgba(0,0,0,0.18) or #1f7a58": "bijv. rgba(0,0,0,0.18) of #1f7a58",
+  "Configure": "Configureren",
+  "Service Settings": "Service-instellingen",
+  "Configure server address for this service": "Configureer het serveradres voor deze service",
+  "Select file formats for this preview service": "Selecteer bestandsformaten voor deze previewservice"
 }

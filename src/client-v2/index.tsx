@@ -7,9 +7,12 @@ import { kkfileviewConfig, PREVIEW_SERVICE_REGISTRY, updateConfigCache } from '.
 import type { KkfileviewConfigRecord } from '../client/configCache';
 import { getFileExt, unwrapDataArray } from '../client/previewUtils';
 import { registerKkfileviewSettings } from '../client/settingsRegistration';
+import { initGlobalWatermark } from '../client/globalWatermarkDom';
 import { SettingsPage } from './SettingsPage';
 import { GlobalWatermarkProvider } from './GlobalWatermarkProvider';
 import { KKFilePreviewer } from './KKFilePreviewer';
+
+export { GlobalWatermarkProvider } from './GlobalWatermarkProvider';
 
 let configLoaded = false;
 let configLoading = false;
@@ -79,7 +82,7 @@ export class PluginFilePreviewerKkfileviewClientV2 extends Plugin {
     apiClientRef = this.app.apiClient;
     void syncConfigCacheFromServer();
 
-    this.app.addProvider(GlobalWatermarkProvider);
+    initGlobalWatermark(this.app);
 
     registerKkfileviewSettings(this.app.pluginSettingsManager as any, this.app.i18n.t.bind(this.app.i18n), {
       Component: SettingsPage,

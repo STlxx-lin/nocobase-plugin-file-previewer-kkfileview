@@ -401,21 +401,21 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     this.registerTokenRevocationHooks();
     this.app.acl.allow('kkfileviewPublicAssets', 'get', 'public');
     this.app.acl.allow('kkfileviewSettings', 'list', 'loggedIn');
-    this.app.acl.allow('kkfileviewSettingsSave', 'save', 'loggedIn');
-    this.app.acl.allow('kkfileviewHealthCheck', 'check', 'loggedIn');
+    this.app.acl.allow('kkfileviewSettingsSave', 'save', 'admin');
+    this.app.acl.allow('kkfileviewHealthCheck', 'check', 'admin');
     this.app.acl.allow('kkfileviewPreview', 'generate', 'loggedIn'); // 允许已登录用户访问预览接口
     this.app.acl.allow('kkfileviewPreview', 'resolveDirectUrl', 'loggedIn');
     this.app.acl.allow('kkfileviewPreview', 'createFileViewerToken', 'loggedIn');
     this.app.acl.allow('kkfileviewModificationRecords', 'list', 'loggedIn');
-    this.app.acl.allow('kkfileviewModificationRecords', 'append', 'loggedIn');
-    this.app.acl.allow('kkfileviewModificationRecords', 'remove', 'loggedIn');
-    this.app.acl.allow('kkfileviewModificationRecords', 'clear', 'loggedIn');
+    this.app.acl.allow('kkfileviewModificationRecords', 'append', 'admin');
+    this.app.acl.allow('kkfileviewModificationRecords', 'remove', 'admin');
+    this.app.acl.allow('kkfileviewModificationRecords', 'clear', 'admin');
     this.app.acl.allow('kkfileviewPreviewRecords', 'list', 'loggedIn');
     this.app.acl.allow('kkfileviewPreviewRecords', 'append', 'loggedIn');
-    this.app.acl.allow('kkfileviewPreviewRecords', 'remove', 'loggedIn');
-    this.app.acl.allow('kkfileviewPreviewRecords', 'clear', 'loggedIn');
-    this.app.acl.allow('kkfileviewFieldCleanup', 'run', 'loggedIn');
-    this.app.acl.allow('kkfileviewFileViewerDownload', ['download', 'progress'], 'loggedIn');
+    this.app.acl.allow('kkfileviewPreviewRecords', 'remove', 'admin');
+    this.app.acl.allow('kkfileviewPreviewRecords', 'clear', 'admin');
+    this.app.acl.allow('kkfileviewFieldCleanup', 'run', 'admin');
+    this.app.acl.allow('kkfileviewFileViewerDownload', ['download', 'progress'], 'admin');
     this.app.acl.allow('kkfileviewFileViewerProxy', 'get', 'loggedIn');
 
     await this.db.sync({ force: false, alter: { drop: false } });
@@ -430,10 +430,22 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     // 定义专用保存资源，确保配置保存时显式覆盖数据库中的第一条记录。
     const autoCorrectFileViewerLoadMode = this.autoCorrectFileViewerLoadMode.bind(this);
     const isFileViewerDistDownloaded = this.isFileViewerDistDownloaded.bind(this);
+    const isAdminUser = this.isAdminUser.bind(this);
     this.app.resourceManager.define({
       name: 'kkfileviewSettingsSave',
       actions: {
         async save(ctx: ActionContext) {
+          const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = {
+              data: {
+                success: false,
+                message: 'forbidden',
+              },
+            };
+            return;
+          }
           // 读取前端提交的配置值，兼容 action params 与 request body 两种来源。
           const values = getActionValues(ctx);
           // 获取配置仓库，用于更新或创建唯一配置记录。
@@ -497,12 +509,18 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     if (this.app.resourceManager.isDefined('kkfileviewModificationRecords')) {
       return;
     }
+    const isAdminUser = this.isAdminUser.bind(this);
     this.app.resourceManager.define({
       name: 'kkfileviewModificationRecords',
       actions: {
         async append(ctx: ActionContext) {
-          const values = getActionValues(ctx);
           const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = { data: { success: false, message: 'forbidden' } };
+            return;
+          }
+          const values = getActionValues(ctx);
           const operator = String(
             currentUser?.nickname || currentUser?.username || values.operator || '-'
           ).trim() || '-';
@@ -645,6 +663,12 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
           };
         },
         async remove(ctx: ActionContext) {
+          const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = { data: { success: false, message: 'forbidden' } };
+            return;
+          }
           const values = getActionValues(ctx);
           const id = values.id;
           if (id == null || String(id).trim() === '') {
@@ -661,6 +685,12 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
           ctx.body = { data: { success: true } };
         },
         async clear(ctx: ActionContext) {
+          const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = { data: { success: false, message: 'forbidden' } };
+            return;
+          }
           const repo = ctx.db.getRepository('kkfileviewModificationRecordItems');
           const rows = await repo.find({ limit: 1000 });
           const list = Array.isArray(rows) ? rows : [];
@@ -687,6 +717,7 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     // 资源动作由 koa-compose 调用，不绑定 this，需用闭包显式绑定。
     const isActionRateLimited = this.isActionRateLimited.bind(this);
     const previewRecordAppendLog = this.previewRecordAppendLog;
+    const isAdminUser = this.isAdminUser.bind(this);
     this.app.resourceManager.define({
       name: 'kkfileviewPreviewRecords',
       actions: {
@@ -746,6 +777,12 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
           };
         },
         async remove(ctx: ActionContext) {
+          const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = { data: { success: false, message: 'forbidden' } };
+            return;
+          }
           const values = getActionValues(ctx);
           const id = values.id;
           if (id == null || String(id).trim() === '') {
@@ -762,6 +799,12 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
           ctx.body = { data: { success: true } };
         },
         async clear(ctx: ActionContext) {
+          const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = { data: { success: false, message: 'forbidden' } };
+            return;
+          }
           const repo = ctx.db.getRepository('kkfileviewPreviewRecordItems');
           const rows = await repo.find({ limit: 1000 });
           const list = Array.isArray(rows) ? rows : [];
@@ -785,10 +828,17 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     if (this.app.resourceManager.isDefined('kkfileviewFieldCleanup')) {
       return;
     }
+    const isAdminUser = this.isAdminUser.bind(this);
     this.app.resourceManager.define({
       name: 'kkfileviewFieldCleanup',
       actions: {
         async run(ctx: ActionContext) {
+          const currentUser = ctx?.state?.currentUser || ctx?.state?.user || ctx?.auth?.user || null;
+          if (!isAdminUser(currentUser)) {
+            ctx.status = 403;
+            ctx.body = { data: { success: false, message: 'forbidden' } };
+            return;
+          }
           const repo = ctx.db.getRepository('kkfileviewSettings');
           const rows = await repo.find({ sort: ['createdAt'] });
           const list = Array.isArray(rows) ? rows : [];

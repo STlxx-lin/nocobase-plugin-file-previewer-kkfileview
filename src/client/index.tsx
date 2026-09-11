@@ -10,12 +10,13 @@ import { KKFilePreviewer } from './KKFilePreviewer';
 import { kkfileviewConfig, PREVIEW_SERVICE_REGISTRY, updateConfigCache } from './configCache';
 import type { KkfileviewConfigRecord } from './configCache';
 import { getFileExt, unwrapDataArray } from './previewUtils';
-import { GlobalWatermarkProvider } from './GlobalWatermarkProvider';
+import { initGlobalWatermark } from './globalWatermarkDom';
 import { registerKkfileviewSettings } from './settingsRegistration';
 
-// 供其他插件（如附件清理工具）复用预览能力
+// 供其他插件（如附件清理工具）复用能力
 export { KKFilePreviewer } from './KKFilePreviewer';
 export type { PreviewerProps, PreviewFileRecord } from './KKFilePreviewer';
+export { GlobalWatermarkProvider } from './GlobalWatermarkProvider';
 
 let configLoaded = false;
 let configLoading = false;
@@ -87,7 +88,7 @@ export class PluginFilePreviewerKkfileviewClient extends Plugin {
     apiClientRef = this.app.apiClient;
     void syncConfigCacheFromServer();
 
-    this.app.addProvider(GlobalWatermarkProvider);
+    initGlobalWatermark(this.app);
 
     registerKkfileviewSettings(this.app.pluginSettingsManager as any, this.app.i18n.t.bind(this.app.i18n), {
       Component: SettingsPage,

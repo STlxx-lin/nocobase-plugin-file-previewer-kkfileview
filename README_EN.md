@@ -4,7 +4,8 @@
   <b>English</b> | <a href="./README.md">简体中文</a>
 </p>
 
-[![Views](https://komarev.com/ghpvc/?username=nocobase-file-previewer-kkfileview&color=007ec6&style=flat-square&label=Views)](https://github.com)
+[![Views](https://komarev.com/ghpvc/?username=nocobase-file-previewer-kkfileview&color=007ec6&style=flat-square&label=Views)](https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview)
+[![Version](https://img.shields.io/badge/version-v0.8.8-blue.svg)](https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview/releases)
 [![NocoBase Version](https://img.shields.io/badge/NocoBase-2.1.x%20%7C%202.2.x-brightgreen.svg)](https://www.nocobase.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 

@@ -1,10 +1,16 @@
 # @nocobase/plugin-file-previewer-kkfileview
 
+<p align="left">
+  <b>简体中文</b> | <a href="./README_EN.md">English</a>
+</p>
+
 [![Views](https://komarev.com/ghpvc/?username=nocobase-file-previewer-kkfileview&color=007ec6&style=flat-square&label=Views)](https://github.com)
 [![NocoBase Version](https://img.shields.io/badge/NocoBase-2.1.x%20%7C%202.2.x-brightgreen.svg)](https://www.nocobase.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 高功能、多引擎的 NocoBase 文件预览插件，深度集成 **kkFileView**、**BaseMetas**、**Microsoft Online** 与本地离线 **File Viewer** 四大预览引擎。为 NocoBase 提供涵盖 Office 文档（Word/Excel/PPT）、PDF、CAD 图纸、3D 模型、音视频及压缩包的全方位在线与离线预览解决方案。
+
+*A powerful, multi-engine file preview plugin for NocoBase. Deeply integrates **kkFileView**, **BaseMetas**, **Microsoft Online**, and offline **File Viewer** to deliver comprehensive online & offline document viewing for Office, PDF, CAD, 3D, audio/video, and archive files.*
 
 ---
 

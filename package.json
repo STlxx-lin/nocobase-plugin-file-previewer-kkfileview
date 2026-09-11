@@ -1,8 +1,8 @@
 {
   "name": "@nocobase/plugin-file-previewer-kkfileview",
-  "displayName": "FileView 文件预览配置",
+  "displayName": "File Preview Configuration",
   "displayName.zh-CN": "FileView 文件预览配置",
-  "description": "集成 kkFileView、BaseMetas 与 File Viewer 预览服务，支持 Office、PDF、CAD、3D 模型、音视频及压缩包等多种文件格式的在线与离线预览。反馈QQ：1414794992",
+  "description": "Multi-engine file preview plugin for NocoBase supporting kkFileView, BaseMetas, Microsoft Online, and offline File Viewer for Office, PDF, CAD, 3D, and media files.",
   "description.zh-CN": "集成 kkFileView、BaseMetas 与 File Viewer 预览服务，支持 Office、PDF、CAD、3D 模型、音视频及压缩包等多种文件格式在线与离线预览。反馈QQ：1414794992",
   "homepage": "https://github.com/STlxx-lin/plugin-file-previewer-kkfileview",
   "homepage.zh-CN": "https://github.com/STlxx-lin/plugin-file-previewer-kkfileview",

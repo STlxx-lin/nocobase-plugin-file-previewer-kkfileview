@@ -6,7 +6,7 @@
   "description.zh-CN": "集成 kkFileView、BaseMetas 与 File Viewer 预览服务，支持 Office、PDF、CAD、3D 模型、音视频及压缩包等多种文件格式在线与离线预览。反馈QQ：1414794992",
   "homepage": "https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview",
   "homepage.zh-CN": "https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "main": "dist/server/index.js",
   "client": "dist/client/index.js",
   "nocobase": {
@@ -24,9 +24,9 @@
     "js-base64": "^3.7.8"
   },
   "peerDependencies": {
-    "@nocobase/client": "2.x",
-    "@nocobase/plugin-file-manager": "2.x",
-    "@nocobase/server": "2.x",
-    "@nocobase/test": "2.x"
+    "@nocobase/client": "2.2.10",
+    "@nocobase/plugin-file-manager": "2.2.10",
+    "@nocobase/server": "2.2.10",
+    "@nocobase/test": "2.2.10"
   }
 }

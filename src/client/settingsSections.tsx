@@ -4,7 +4,7 @@
  */
 import React, { useState } from 'react';
 import { AppstoreOutlined, SettingOutlined, EyeOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons';
-import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Steps, Switch, Table, Typography, Tag, Tooltip, Row, Col, Progress, Statistic, Alert, Divider, Badge, Tabs, Descriptions } from 'antd';
+import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Steps, Switch, Table, Typography, Tag, Tooltip, Row, Col, Progress, Statistic, Alert, Divider, Badge, Tabs, Descriptions, theme } from 'antd';
 import type { FormInstance } from 'antd';
 import {
   DEFAULT_EXTENSIONS,
@@ -184,7 +184,7 @@ export const formatFriendlyValue = (val: string | undefined, field: string | und
   }
   const text = String(val).trim();
   if (!text || text === '空') {
-    return <Tag style={{ color: '#8c8c8c', background: '#f5f5f5', borderColor: '#d9d9d9' }}>{t('Empty')}</Tag>;
+    return <Tag color="default">{t('Empty')}</Tag>;
   }
 
   if (text === 'true') {
@@ -704,6 +704,7 @@ export const BasicSettingsCard = ({
   downloadProgress,
   form,
 }: BasicProps) => {
+  const { token } = theme.useToken();
   const [configModalService, setConfigModalService] = useState<PreviewService | null>(null);
 
   const activeService = PREVIEW_SERVICE_REGISTRY.find((s) => s.key === configModalService);
@@ -714,7 +715,7 @@ export const BasicSettingsCard = ({
         size="small"
         bordered={false}
         title={t('Preview Service Switches')}
-        style={{ marginBottom: 16, background: '#fafafa', border: '1px solid #f0f0f0' }}
+        style={{ marginBottom: 16, background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}` }}
         bodyStyle={{ padding: 16 }}
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
@@ -723,7 +724,7 @@ export const BasicSettingsCard = ({
         <Row gutter={[12, 12]}>
           {PREVIEW_SERVICE_REGISTRY.map((service) => (
             <Col key={`${service.key}-enabled`} xs={24} md={12}>
-              <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
+              <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
                 <Space align="center">
                   <Typography.Text strong>{t(service.title)}</Typography.Text>
                   {service.key === 'fileViewer' && (
@@ -784,7 +785,7 @@ export const BasicSettingsCard = ({
         title={
           activeService ? (
             <Space align="center" size={8}>
-              <SettingOutlined style={{ fontSize: 18, color: '#1677ff' }} />
+              <SettingOutlined style={{ fontSize: 18, color: token.colorPrimary }} />
               <Typography.Title level={5} style={{ margin: 0 }}>
                 {`${t(activeService.title)} ${t('Settings')}`}
               </Typography.Title>
@@ -806,7 +807,7 @@ export const BasicSettingsCard = ({
         {activeService && (
           <Space direction="vertical" style={{ width: '100%' }} size={20}>
             {/* 1. 服务器主机地址与连通性测试 */}
-            <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: '16px' }}>
+            <div style={{ background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '16px' }}>
               <Form.Item
                 name={activeService.hostField}
                 preserve={true}
@@ -847,7 +848,7 @@ export const BasicSettingsCard = ({
 
             {/* 2. BaseMetas 专属：请求类型控制 */}
             {activeService.key === 'basemetas' && (
-              <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: '16px' }}>
+              <div style={{ background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '16px' }}>
                 <Form.Item
                   name="basemetasRequestType"
                   preserve={true}
@@ -865,7 +866,7 @@ export const BasicSettingsCard = ({
 
             {/* 2b. BaseMetas 专属：文件获取方式控制 */}
             {activeService.key === 'basemetas' && (
-              <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: '16px' }}>
+              <div style={{ background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '16px' }}>
                 <Form.Item
                   name="basemetasFileAccess"
                   preserve={true}
@@ -885,7 +886,7 @@ export const BasicSettingsCard = ({
 
             {/* 2c. kkFileView 专属：文件获取方式控制 */}
             {activeService.key === 'kkfileview' && (
-              <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: '16px' }}>
+              <div style={{ background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '16px' }}>
                 <Form.Item
                   name="kkfileviewFileAccess"
                   preserve={true}
@@ -905,7 +906,7 @@ export const BasicSettingsCard = ({
 
             {/* 3. File Viewer 专属：离线模式与加载模式 */}
             {activeService.key === 'fileViewer' && (
-              <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: '16px' }}>
+              <div style={{ background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '16px' }}>
                 <Form.Item
                   name="fileViewerLoadMode"
                   preserve={true}
@@ -921,7 +922,7 @@ export const BasicSettingsCard = ({
                   </Radio.Group>
                 </Form.Item>
 
-                <Card size="small" style={{ background: '#fff', border: '1px solid #e8e8e8', borderRadius: 6 }}>
+                <Card size="small" style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 6 }}>
                   <Typography.Text strong>{t('Download Static Files')}</Typography.Text>
                   <Typography.Paragraph type="secondary" style={{ marginTop: 4, marginBottom: 12, fontSize: 12 }}>
                     {t(
@@ -955,7 +956,7 @@ export const BasicSettingsCard = ({
             )}
 
             {/* 4. 文件格式矩阵配置 */}
-            <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 8, padding: '16px' }}>
+            <div style={{ background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '16px' }}>
               <Form.Item
                 name={activeService.extensionsField}
                 preserve={true}
@@ -979,12 +980,12 @@ export const BasicSettingsCard = ({
       size="small"
       bordered={false}
       title={t('Preview Dialog Buttons')}
-      style={{ marginBottom: 16, background: '#fafafa', border: '1px solid #f0f0f0' }}
+      style={{ marginBottom: 16, background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}` }}
       bodyStyle={{ padding: 16 }}
     >
       <Row gutter={[12, 12]}>
         <Col xs={24} md={12}>
-          <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Typography.Text strong>{t('Enable Open In New Window Button')}</Typography.Text>
               <Form.Item
@@ -1001,7 +1002,7 @@ export const BasicSettingsCard = ({
           </div>
         </Col>
         <Col xs={24} md={12}>
-          <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Typography.Text strong>{t('Enable Fullscreen Button')}</Typography.Text>
               <Form.Item
@@ -1018,7 +1019,7 @@ export const BasicSettingsCard = ({
           </div>
         </Col>
         <Col xs={24} md={12}>
-          <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Typography.Text strong>{t('Enable Mobile Auto Fullscreen')}</Typography.Text>
               <Form.Item
@@ -1035,7 +1036,7 @@ export const BasicSettingsCard = ({
           </div>
         </Col>
         <Col xs={24} md={12}>
-          <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Typography.Text strong>{t('Enable Download Button')}</Typography.Text>
               <Form.Item
@@ -1052,7 +1053,7 @@ export const BasicSettingsCard = ({
           </div>
         </Col>
         <Col xs={24} md={24}>
-          <div style={{ background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Typography.Text strong>{t('Enable Copy Embed Button')}</Typography.Text>
               <Form.Item
@@ -1078,7 +1079,7 @@ export const BasicSettingsCard = ({
                 if (getFieldValue('enableCopyEmbedHtml') !== true) return null;
                 const permission = (getFieldValue('copyEmbedHtmlPermission') || 'user') as EmbedCodePermission;
                 return (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #f0f0f0' }}>
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${token.colorBorderSecondary}` }}>
                     <Typography.Text strong>{t('Copy Embed Button Permission')}</Typography.Text>
                     <Typography.Paragraph type="secondary" style={{ marginBottom: 8, marginTop: 4, fontSize: 12 }}>
                       {t('Who can see the copy embed code button')}
@@ -1145,6 +1146,7 @@ export const AdvancedSettingsCard = ({
   watermark,
   watermarkType,
 }: AdvancedProps) => {
+  const { token } = theme.useToken();
   // 将外部传入的水印类型归一化为预期枚举，避免异常值导致文案和状态错乱。
   const resolvedWatermarkType = watermarkType === 'global' ? 'global' : 'preview';
 
@@ -1158,7 +1160,7 @@ export const AdvancedSettingsCard = ({
         size="small" // 使用小卡片尺寸，与基础设置保持一致
         bordered={false} // 内层卡片不显示边框
         title={t('NocoBase Server Address')} // NocoBase 服务器地址配置分组标题
-        style={{ marginBottom: 16, background: '#fafafa', border: '1px solid #f0f0f0' }} // 浅灰背景和细边框，与基础设置卡片风格统一
+        style={{ marginBottom: 16, background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}` }}
         bodyStyle={{ padding: 16 }} // 内边距与基础设置一致
       >
         <Typography.Paragraph
@@ -1181,7 +1183,7 @@ export const AdvancedSettingsCard = ({
         size="small" // 水印相关配置小卡片
         bordered={false} // 不显示外边框
         title={t('Watermark Type')} // 使用水印类型作为整体分组标题
-        style={{ marginBottom: 0, background: '#fafafa', border: '1px solid #f0f0f0' }} // 与其它小卡片统一浅灰背景和边框
+        style={{ marginBottom: 0, background: token.colorFillAlter, border: `1px solid ${token.colorBorderSecondary}` }}
         bodyStyle={{ padding: 16 }} // 统一内边距
       >
         <Form.Item name="watermarkType" style={{ marginBottom: 12 }}>
@@ -1248,6 +1250,7 @@ export const ModificationRecordsCard = ({
   t,
   visible,
 }: HistoryProps) => {
+  const { token } = theme.useToken();
   const tr = (key: string, fallback: string) => {
     const translated = t(key);
     return translated === key ? fallback : translated;
@@ -1336,7 +1339,7 @@ export const ModificationRecordsCard = ({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '100%' }}>
                     {/* 模块分类展示行 */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, color: '#8c8c8c', marginRight: 2 }}>{t('Module')}:</span>
+                      <span style={{ fontSize: 12, color: token.colorTextSecondary, marginRight: 2 }}>{t('Module')}:</span>
                       {categories.map((cat) => (
                         <Tag color="purple" key={cat} style={{ marginInlineEnd: 0, fontWeight: 600, fontSize: 12 }}>
                           {cat}
@@ -1356,7 +1359,7 @@ export const ModificationRecordsCard = ({
                               <span>{label}:</span>{' '}
                               <span style={{ textDecoration: 'line-through', opacity: 0.65, marginRight: 2 }}>{shortBefore}</span>
                               ➔{' '}
-                              <span style={{ fontWeight: 600, color: '#1677ff', marginLeft: 2 }}>{shortAfter}</span>
+                              <span style={{ fontWeight: 600, color: token.colorPrimary, marginLeft: 2 }}>{shortAfter}</span>
                             </Tag>
                           );
                         }
@@ -1426,7 +1429,7 @@ export const ModificationRecordsCard = ({
         open={!!detailModalRecord}
         title={
           <Space>
-            <EyeOutlined style={{ color: '#1677ff' }} />
+            <EyeOutlined style={{ color: token.colorPrimary }} />
             <span>{tr('Modification Record Details', '修改记录详情')}</span>
           </Space>
         }
@@ -1481,7 +1484,7 @@ export const ModificationRecordsCard = ({
                   {detailModalRecord.time}
                 </Descriptions.Item>
                 <Descriptions.Item label={tr('Total Changes', '受影响字段')}>
-                  <Badge count={`${details.length} ${tr('fields', '项')}`} overflowCount={999} style={{ backgroundColor: '#52c41a' }} />
+                  <Badge count={`${details.length} ${tr('fields', '项')}`} overflowCount={999} style={{ backgroundColor: token.colorSuccess }} />
                 </Descriptions.Item>
               </Descriptions>
 
@@ -1516,7 +1519,7 @@ export const ModificationRecordsCard = ({
                             width: 210,
                             render: (val, item) => (
                               <Space direction="vertical" size={2}>
-                                <Typography.Text strong style={{ fontSize: 13, color: '#1f1f1f' }}>
+                                <Typography.Text strong style={{ fontSize: 13, color: token.colorText }}>
                                   {getTranslatedFieldLabel(val || item.field, t)}
                                 </Typography.Text>
                                 <Tag color="cyan" style={{ fontFamily: 'monospace', marginInlineEnd: 0, fontSize: 11 }}>
@@ -1547,7 +1550,7 @@ export const ModificationRecordsCard = ({
                       <div style={{ position: 'relative' }}>
                         <Button
                           size="small"
-                          icon={copiedRawJson ? <CheckOutlined style={{ color: '#52c41a' }} /> : <CopyOutlined />}
+                          icon={copiedRawJson ? <CheckOutlined style={{ color: token.colorSuccess }} /> : <CopyOutlined />}
                           style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}
                           onClick={() => void handleCopyJson(rawJsonString)}
                         >
@@ -1678,74 +1681,76 @@ export const FieldCleanupCard = ({
   onRun,
   t,
   visible,
-}: CleanupProps) => (
-  <Card
-    bordered={false}
-    title={t('Field Cleanup')}
-    extra={<Button type="primary" loading={loading} onClick={onRun}>{t('Run Cleanup')}</Button>}
-    style={{ marginTop: 16, display: visible ? 'block' : 'none' }}
-  >
-    {/* 功能说明 */}
-    <Alert
-      type="info"
-      showIcon
-      message={t('Field Cleanup Description')}
-      description={t('Migrate legacy fields to new fields when missing, then clear legacy compatibility fields.')}
-      style={{ marginBottom: 16 }}
-    />
+}: CleanupProps) => {
+  const { token } = theme.useToken();
+  return (
+    <Card
+      bordered={false}
+      title={t('Field Cleanup')}
+      extra={<Button type="primary" loading={loading} onClick={onRun}>{t('Run Cleanup')}</Button>}
+      style={{ marginTop: 16, display: visible ? 'block' : 'none' }}
+    >
+      {/* 功能说明 */}
+      <Alert
+        type="info"
+        showIcon
+        message={t('Field Cleanup Description')}
+        description={t('Migrate legacy fields to new fields when missing, then clear legacy compatibility fields.')}
+        style={{ marginBottom: 16 }}
+      />
 
-    {/* 执行结果统计 */}
-    {result ? (
-      <>
-        <Divider orientation="left" style={{ fontSize: 13, color: '#666' }}>
-          {t('Last Execution Result')} &nbsp;
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {result.executedAt}
-          </Typography.Text>
-        </Divider>
-        <Row gutter={24} style={{ marginBottom: 16 }}>
-          <Col span={8}>
-            <Card size="small" bordered style={{ textAlign: 'center', background: '#f6ffed', borderColor: '#b7eb8f' }}>
-              <Statistic
-                title={<span style={{ color: '#389e0d', fontWeight: 600 }}>{t('Migrated Records')}</span>}
-                value={result.migratedCount}
-                suffix={t('records')}
-                valueStyle={{ color: '#389e0d', fontSize: 28 }}
-              />
-            </Card>
-          </Col>
-          <Col span={8}>
-            <Card size="small" bordered style={{ textAlign: 'center', background: '#e6f4ff', borderColor: '#91caff' }}>
-              <Statistic
-                title={<span style={{ color: '#0958d9', fontWeight: 600 }}>{t('Cleaned Records')}</span>}
-                value={result.cleanedCount}
-                suffix={t('records')}
-                valueStyle={{ color: '#0958d9', fontSize: 28 }}
-              />
-            </Card>
-          </Col>
-          <Col span={8}>
-            <Card size="small" bordered style={{ textAlign: 'center', background: result.migratedCount === 0 && result.cleanedCount === 0 ? '#fffbe6' : '#f9f9f9', borderColor: result.migratedCount === 0 && result.cleanedCount === 0 ? '#ffe58f' : '#d9d9d9' }}>
-              <Statistic
-                title={<span style={{ fontWeight: 600 }}>{t('Status')}</span>}
-                value={result.migratedCount === 0 && result.cleanedCount === 0 ? t('Already Clean') : t('Cleanup Done')}
-                valueStyle={{
-                  fontSize: 16,
-                  color: result.migratedCount === 0 && result.cleanedCount === 0 ? '#d48806' : '#52c41a',
-                }}
-              />
-            </Card>
-          </Col>
-        </Row>
-      </>
-    ) : (
-      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-        <Badge status="default" />&nbsp;{t('Not executed yet')}
-      </Typography.Text>
-    )}
+      {/* 执行结果统计 */}
+      {result ? (
+        <>
+          <Divider orientation="left" style={{ fontSize: 13, color: token.colorTextSecondary }}>
+            {t('Last Execution Result')} &nbsp;
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {result.executedAt}
+            </Typography.Text>
+          </Divider>
+          <Row gutter={24} style={{ marginBottom: 16 }}>
+            <Col span={8}>
+              <Card size="small" bordered style={{ textAlign: 'center', background: token.colorSuccessBg, borderColor: token.colorSuccessBorder }}>
+                <Statistic
+                  title={<span style={{ color: token.colorSuccess, fontWeight: 600 }}>{t('Migrated Records')}</span>}
+                  value={result.migratedCount}
+                  suffix={t('records')}
+                  valueStyle={{ color: token.colorSuccess, fontSize: 28 }}
+                />
+              </Card>
+            </Col>
+            <Col span={8}>
+              <Card size="small" bordered style={{ textAlign: 'center', background: token.colorInfoBg, borderColor: token.colorInfoBorder }}>
+                <Statistic
+                  title={<span style={{ color: token.colorInfo, fontWeight: 600 }}>{t('Cleaned Records')}</span>}
+                  value={result.cleanedCount}
+                  suffix={t('records')}
+                  valueStyle={{ color: token.colorInfo, fontSize: 28 }}
+                />
+              </Card>
+            </Col>
+            <Col span={8}>
+              <Card size="small" bordered style={{ textAlign: 'center', background: result.migratedCount === 0 && result.cleanedCount === 0 ? token.colorWarningBg : token.colorFillAlter, borderColor: result.migratedCount === 0 && result.cleanedCount === 0 ? token.colorWarningBorder : token.colorBorderSecondary }}>
+                <Statistic
+                  title={<span style={{ fontWeight: 600 }}>{t('Status')}</span>}
+                  value={result.migratedCount === 0 && result.cleanedCount === 0 ? t('Already Clean') : t('Cleanup Done')}
+                  valueStyle={{
+                    fontSize: 16,
+                    color: result.migratedCount === 0 && result.cleanedCount === 0 ? token.colorWarning : token.colorSuccess,
+                  }}
+                />
+              </Card>
+            </Col>
+          </Row>
+        </>
+      ) : (
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+          <Badge status="default" />&nbsp;{t('Not executed yet')}
+        </Typography.Text>
+      )}
 
-    {/* 旧字段 → 新字段映射说明表 */}
-    <Divider orientation="left" style={{ fontSize: 13, color: '#666' }}>{t('Legacy Field Mapping')}</Divider>
+      {/* 旧字段 → 新字段映射说明表 */}
+      <Divider orientation="left" style={{ fontSize: 13, color: token.colorTextSecondary }}>{t('Legacy Field Mapping')}</Divider>
     <Table
       size="small"
       rowKey="legacy"
@@ -1778,4 +1783,5 @@ export const FieldCleanupCard = ({
       ]}
     />
   </Card>
-);
+  );
+};

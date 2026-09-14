@@ -50,6 +50,16 @@ export function ensureLegacyAppDevDeps(globalObject?: Partial<LegacyAppDevGlobal
   }
 
   const definedModules = getDefinedModules(globalObject);
+  // 全量桥接 RequireJS 已定义的模块，确保开发态热更新外部依赖（如 @formily/react、@formily/antd-v5 等）不为 undefined
+  Object.keys(definedModules).forEach((modId) => {
+    if (!globalObject.__nocobase_app_dev_deps__![modId]) {
+      globalObject.__nocobase_app_dev_deps__![modId] = definedModules[modId];
+    }
+    if (!globalObject.__nocobase_app_dev_plugins__![modId]) {
+      globalObject.__nocobase_app_dev_plugins__![modId] = definedModules[modId];
+    }
+  });
+
   LEGACY_APP_DEV_DEP_ALIASES.forEach(([targetId, sourceId]) => {
     if (definedModules[sourceId] !== undefined) {
       if (!globalObject.__nocobase_app_dev_deps__![targetId]) {

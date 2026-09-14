@@ -2,7 +2,7 @@
  * @jsxRuntime classic
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Button, Space, Typography, Radio, message, Input, Form, Select, Switch, Spin, Progress, Tooltip } from 'antd';
+import { Modal, Button, Space, Typography, Radio, message, Input, Form, Select, Switch, Spin, Progress, Tooltip, theme } from 'antd';
 import { CloseOutlined, LeftOutlined, RightOutlined, FullscreenOutlined, FullscreenExitOutlined, ExportOutlined, CodeOutlined, DownloadOutlined } from '@ant-design/icons';
 import { Base64 } from 'js-base64';
 import { ClientAdapters } from './adapter';
@@ -265,6 +265,7 @@ function isAdminUser(user: CurrentUserLike | null | undefined, roleTokens: strin
 
 export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
   const { index, list, file: directFile, onSwitchIndex, open, onOpenChange, onClose, adapters } = props;
+  const { token } = theme.useToken();
   const file = directFile || (typeof index === 'number' ? list?.[index] : undefined);
   const isOpen = typeof open === 'boolean' ? open : index !== null && index !== undefined;
   const t = adapters.useT();
@@ -1251,14 +1252,14 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
         destroyOnClose
         closeIcon={null}
       >
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '12px 16px', borderBottom: `1px solid ${token.colorBorderSecondary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography.Title level={5} style={{ margin: 0 }} ellipsis={{ tooltip: fileDisplayTitle }}>
             {fileDisplayTitle}
           </Typography.Title>
           <Button type="text" icon={<CloseOutlined />} onClick={handleClose} />
         </div>
 
-        <div ref={previewContainerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
+        <div ref={previewContainerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: token.colorBgLayout }}>
           {unsupportedFile ? (
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
               <Typography.Text type="secondary">{t('Current file format does not support online preview')}</Typography.Text>
@@ -1332,7 +1333,7 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
               ) : null}
 
               {showFileViewerLoading ? (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.72)', zIndex: 10 }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: token.colorBgMask, zIndex: 10 }}>
                   <Space direction="vertical" align="center" size={12}>
                     <Spin size="large" />
                     <Typography.Text type="secondary">
@@ -1356,7 +1357,7 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
                 <iframe
                   key={`${effectivePreviewUrl}-${iframeRetrySeed}`}
                   src={effectivePreviewUrl}
-                  style={{ width: '100%', height: '100%', border: 'none', display: 'block', backgroundColor: '#fff' }}
+                  style={{ width: '100%', height: '100%', border: 'none', display: 'block', backgroundColor: token.colorBgContainer }}
                   onLoad={() => {
                     iframeLoadedRef.current = true;
                     setIframeLoadFailed(false);
@@ -1370,7 +1371,7 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
                 />
               ) : null}
               {showIframeLoading ? (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.72)', zIndex: 10 }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: token.colorBgMask, zIndex: 10 }}>
                   <Space direction="vertical" align="center" size={8}>
                     <Spin size="large" />
                     <Typography.Text type="secondary">
@@ -1412,7 +1413,7 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
         <div
           style={{
             padding: isMobileViewport ? '8px 12px' : '10px 16px',
-            borderTop: '1px solid #f0f0f0',
+            borderTop: `1px solid ${token.colorBorderSecondary}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',

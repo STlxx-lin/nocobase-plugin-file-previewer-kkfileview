@@ -429,6 +429,13 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
     [enabledModes, modeSupportedMap]
   );
 
+  const fileKey = useMemo(() => {
+    const rawId = (file as any)?.id;
+    const rawUrl = file?.url || '';
+    const rawName = (file as any)?.filename || (file as any)?.name || (file as any)?.path || '';
+    return `${rawId}_${rawUrl}_${rawName}`;
+  }, [file]);
+
   useEffect(() => {
     if (!configReady) return;
     const next = decidePreviewMode({
@@ -436,8 +443,11 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
       enabledModes,
       enabledAndSupportedModes,
     });
-    setPreviewMode(next);
-  }, [configReady, preferredPreview, enabledModes, enabledAndSupportedModes, fileMeta.isImg, fileMeta.isPdf, file?.url]);
+    // 当 previewMode 尚未初始化，或者当前 previewMode 不支持当前文件时（且存在支持的模式），自动切换为最优支持模式 next
+    if (!previewMode || (!enabledAndSupportedModes.includes(previewMode) && enabledAndSupportedModes.length > 0)) {
+      setPreviewMode(next);
+    }
+  }, [configReady, preferredPreview, enabledModes, enabledAndSupportedModes, fileMeta.isImg, fileMeta.isPdf, fileKey, previewMode]);
 
   const [resolvedDirectFileUrl, setResolvedDirectFileUrl] = useState<string>('');
 
@@ -1428,13 +1438,13 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
           }}
         >
           <Space size={isMobileViewport ? 'small' : 'middle'} style={{ flexWrap: 'wrap' }}>
-            {enabledModes.length > 1 && (
+            {!fileMeta.isImg && enabledAndSupportedModes.length > 1 && (
               isMobileViewport ? (
                 <Select
                   size="small"
                   value={previewMode}
                   onChange={(val) => setPreviewMode(val as PreviewService)}
-                  options={enabledModes.map((mode) => ({
+                  options={enabledAndSupportedModes.map((mode) => ({
                     label: mode === 'microsoft' ? '微软' : mode === 'kkfileview' ? 'kkFile' : mode === 'basemetas' ? 'BaseMetas' : 'FileViewer',
                     value: mode,
                   }))}
@@ -1447,7 +1457,7 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
                   optionType="button"
                   buttonStyle="solid"
                 >
-                  {enabledModes.map((mode) => (
+                  {enabledAndSupportedModes.map((mode) => (
                     <Radio.Button key={mode} value={mode}>
                       {mode === 'microsoft' ? '微软在线预览' : mode === 'kkfileview' ? 'kkFileView' : mode === 'basemetas' ? 'BaseMetas' : 'File Viewer'}
                     </Radio.Button>

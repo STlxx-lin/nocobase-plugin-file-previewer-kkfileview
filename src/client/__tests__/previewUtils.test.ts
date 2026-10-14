@@ -81,6 +81,15 @@ describe('previewUtils', () => {
         enabledAndSupportedModes: ['microsoft'],
       })
     ).toBe('microsoft');
+
+    // 当文件为 zip 压缩包，用户首选为 fileViewer 但 fileViewer 未配置 zip，而 basemetas 支持 zip 时
+    expect(
+      decidePreviewMode({
+        preferredPreview: 'fileViewer',
+        enabledModes: ['basemetas', 'fileViewer'],
+        enabledAndSupportedModes: ['basemetas'],
+      })
+    ).toBe('basemetas');
   });
 
   it('isNocoBaseForcedDownloadUrl 应该识别会被强制下载的 NocoBase 活动内容文件', () => {

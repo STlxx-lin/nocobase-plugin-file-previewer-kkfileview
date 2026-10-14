@@ -550,7 +550,11 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
               previewToken && fileViewerSourceUrl
                 ? buildFileViewerProxyUrl(fileViewerSourceUrl, previewToken, kkfileviewConfig.nocobaseHost)
                 : '';
-            targetUrl = proxyTarget || activeTargetFileUrl;
+            targetUrl = proxyTarget;
+          }
+          if (!targetUrl) {
+            acc[service.key] = '';
+            return acc;
           }
           try {
             if (decodeURIComponent(targetUrl) !== targetUrl) {

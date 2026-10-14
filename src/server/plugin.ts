@@ -296,6 +296,9 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
   /** 已签发的短期预览令牌注册表：jti -> { token, userId, expiresAt }，用于退出登录时批量吊销。 */
   private previewTokenRegistry = new Map<string, { token: string; userId: number | string; expiresAt: number }>();
 
+  /** 明确被吊销的短期预览令牌 JTI 黑名单集合。 */
+  private revokedPreviewTokenJtis = new Set<string>();
+
   /** 令牌签发请求限流记录：userId -> 时间戳列表（滑动窗口）。 */
   private previewTokenRequestLog = new Map<number | string, number[]>();
 
@@ -308,7 +311,35 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
   /** 令牌签发限流滑动窗口（毫秒）。 */
   private static readonly PREVIEW_TOKEN_RATE_LIMIT_WINDOW = 60 * 1000;
 
+  /**
+   * 确保 NocoBase 网关 Gateway 具备 HTTP/2 (h2c) 明文降级支持。
+   * Java 11+ HttpClient（BaseMetas / kkFileView 下载器）默认发送 Upgrade: h2c 头。
+   * 原生网关将未匹配 WS_PATH 的 Upgrade 请求直接 socket.destroy()，导致 Java 端报
+   * "HTTP/1.1 header parser received no bytes"。此处自动修补磁盘文件确保降级为 HTTP/1.1。
+   */
+  private ensureGatewayHttp2FallbackPatch() {
+    try {
+      const fs = require('fs');
+      const gatewayPath = require.resolve('@nocobase/server/lib/gateway/index.js', { paths: [process.cwd()] });
+      if (fs.existsSync(gatewayPath)) {
+        let content = fs.readFileSync(gatewayPath, 'utf8');
+        if (!content.includes('http2-settings') || !content.includes("request.headers.connection = 'close'")) {
+          const oldDestroyBlock = `      const { pathname } = (0, import_url.parse)(request.url);\n      if (pathname === import_node_process.default.env.WS_PATH) {\n        this.wsServer.wss.handleUpgrade(request, socket, head, (ws) => {\n          this.wsServer.wss.emit("connection", ws, request);\n        });\n      } else {\n        socket.destroy();\n      }`;
+          const newFallbackBlock = `      const { pathname } = (0, import_url.parse)(request.url);\n      if (pathname === import_node_process.default.env.WS_PATH) {\n        this.wsServer.wss.handleUpgrade(request, socket, head, (ws) => {\n          this.wsServer.wss.emit("connection", ws, request);\n        });\n      } else {\n        try {\n          delete request.headers.upgrade;\n          delete request.headers['http2-settings'];\n          request.headers.connection = 'close';\n          const res = new import_http.default.ServerResponse(request);\n          res.setHeader('Connection', 'close');\n          res.assignSocket(socket);\n          res.on('finish', () => {\n            try {\n              socket.end();\n            } catch {}\n          });\n          this.server.emit("request", request, res);\n        } catch (e) {\n          socket.destroy();\n        }\n      }`;
+          if (content.includes(oldDestroyBlock)) {
+            content = content.replace(oldDestroyBlock, newFallbackBlock);
+            fs.writeFileSync(gatewayPath, content, 'utf8');
+            console.log('[plugin-file-previewer-kkfileview] Gateway HTTP/2 h2c fallback patch automatically applied to node_modules/@nocobase/server.');
+          }
+        }
+      }
+    } catch {
+      // 容错处理，避免影响主插件加载
+    }
+  }
+
   async load() {
+    this.ensureGatewayHttp2FallbackPatch();
     const servePublicFile = async (ctx: any, next: () => Promise<any>) => {
       const apiPrefix = '/api/kkfileviewPublicAssets/';
       const publicPrefix = '/static/plugins/@nocobase/plugin-file-previewer-kkfileview/public/';
@@ -377,9 +408,62 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
       await next();
     };
 
+    const handleProxyTokenQuery = async (ctx: any, next: any) => {
+      // 容错 1：BaseMetas / kkFileView 等 Java 客户端常将 URL 路径中的冒号 ":" 自动转义为 "%3A"，
+      // 导致 NocoBase 路由匹配失败返回 404。在此自动归一化为冒号 ":"，确保路由精准命中。
+      if (typeof ctx.path === 'string' && ctx.path.includes('%3A')) {
+        ctx.path = ctx.path.replace(/%3A/gi, ':');
+      }
+      if (typeof ctx.url === 'string' && ctx.url.includes('%3A')) {
+        const qIdx = ctx.url.indexOf('?');
+        if (qIdx === -1) {
+          ctx.url = ctx.url.replace(/%3A/gi, ':');
+        } else {
+          const pathPart = ctx.url.slice(0, qIdx).replace(/%3A/gi, ':');
+          ctx.url = pathPart + ctx.url.slice(qIdx);
+        }
+      }
+      if (typeof ctx.originalUrl === 'string' && ctx.originalUrl.includes('%3A')) {
+        const qIdx = ctx.originalUrl.indexOf('?');
+        if (qIdx === -1) {
+          ctx.originalUrl = ctx.originalUrl.replace(/%3A/gi, ':');
+        } else {
+          const pathPart = ctx.originalUrl.slice(0, qIdx).replace(/%3A/gi, ':');
+          ctx.originalUrl = pathPart + ctx.originalUrl.slice(qIdx);
+        }
+      }
+      if (typeof ctx.req?.url === 'string' && ctx.req.url.includes('%3A')) {
+        const qIdx = ctx.req.url.indexOf('?');
+        if (qIdx === -1) {
+          ctx.req.url = ctx.req.url.replace(/%3A/gi, ':');
+        } else {
+          const pathPart = ctx.req.url.slice(0, qIdx).replace(/%3A/gi, ':');
+          ctx.req.url = pathPart + ctx.req.url.slice(qIdx);
+        }
+      }
+      const rawPath = String(ctx.path || ctx.url || ctx.originalUrl || ctx.req?.url || '');
+      if (rawPath.includes('kkfileviewFileViewerProxy')) {
+        // 容错 2：如果外部预览服务请求带了 token 参数，转为 previewToken 并清除 token，
+        // 彻底防止 NocoBase 全局 getBearerToken 中间件将其误认为系统登录会话 Token 导致 401 拦截
+        if (ctx.query && ctx.query.token && !ctx.query.previewToken) {
+          ctx.query.previewToken = ctx.query.token;
+          delete ctx.query.token;
+        }
+        if (ctx.request?.query && ctx.request.query.token && !ctx.request.query.previewToken) {
+          ctx.request.query.previewToken = ctx.request.query.token;
+          delete ctx.request.query.token;
+        }
+        // 直接接管文件代理处理逻辑，短路执行并返回，彻底规避后端框架路由层对冒号与 URL 编码(%3A)的敏感性导致 404
+        await this.handleFileViewerProxyAction(ctx);
+        return;
+      }
+      await next();
+    };
+
     if (Array.isArray((this.app as any).middleware)) {
-      (this.app as any).middleware.unshift(servePublicFile, patchSettingsUpdate);
+      (this.app as any).middleware.unshift(handleProxyTokenQuery, servePublicFile, patchSettingsUpdate);
     } else {
+      this.app.use(handleProxyTokenQuery);
       this.app.use(servePublicFile);
       this.app.use(patchSettingsUpdate);
     }
@@ -416,7 +500,8 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     this.app.acl.allow('kkfileviewPreviewRecords', 'clear', 'admin');
     this.app.acl.allow('kkfileviewFieldCleanup', 'run', 'admin');
     this.app.acl.allow('kkfileviewFileViewerDownload', ['download', 'progress'], 'admin');
-    this.app.acl.allow('kkfileviewFileViewerProxy', 'get', 'loggedIn');
+    this.app.acl.allow('kkfileviewFileViewerProxy', ['get', 'list'], 'public');
+    this.app.acl.allow('kkfileviewFileViewerProxy%3Aget', ['get', 'list', 'index'], 'public');
 
     await this.db.sync({ force: false, alter: { drop: false } });
     await this.ensureDefaultRecord();
@@ -1002,6 +1087,26 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     return { token, expiresAt, expiresIn };
   }
 
+  /** 获取本机首选非回环局域网 IPv4 地址，用于当外部请求宿主为 127.0.0.1 时的智能兜底。 */
+  private getPreferredLanIp(): string {
+    try {
+      const interfaces = os.networkInterfaces();
+      for (const name of Object.keys(interfaces)) {
+        for (const net of interfaces[name] || []) {
+          if (net.family === 'IPv4' && !net.internal) {
+            // 优先匹配标准私网地址段 192.168.x.x, 10.x.x.x, 172.16-31.x.x
+            if (net.address.startsWith('192.168.') || net.address.startsWith('10.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(net.address)) {
+              return net.address;
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return '';
+  }
+
   /**
    * 将 NocoBase 托管路径（相对或绝对）归一化为可被外部预览服务访问的绝对地址。
    * 外部存储直链一律不返回，统一经 NocoBase 自身路径访问以应用 ACL 校验。
@@ -1032,8 +1137,18 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
       }
     }
     const request = (ctx as any)?.request || {};
-    const host = request.header?.host || request.host || '';
+    let host = request.header?.host || request.host || '';
     const protocol = request.protocol || 'http';
+    const port = String(process.env.APP_PORT || 13000);
+
+    // 智能兜底：若 host 包含 localhost / 127.0.0.1，外部独立预览服务将无法访问，自动回退到本机局域网非回环 IPv4
+    if (!host || /^127\.0\.0\.1(:|$)/.test(host) || /^localhost(:|$)/i.test(host)) {
+      const lanIp = this.getPreferredLanIp();
+      if (lanIp) {
+        const hostPort = host.includes(':') ? host.split(':')[1] : port;
+        host = `${lanIp}:${hostPort}`;
+      }
+    }
     const publicPath = (ctx as any)?.app?.getAppPublicPath?.() || process.env.APP_PUBLIC_PATH || '/';
     const base = `${protocol}://${host}${publicPath.replace(/\/+$/, '')}`;
     return `${base}${pathAndQuery.startsWith('/') ? '' : '/'}${pathAndQuery}`;
@@ -1130,17 +1245,19 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
       const decodedUrl = `${parsed.origin}${decodedPath}`;
       const fileName = String(decodedPath.split('/').pop() || '').trim();
       if (!fileName) return null;
+      const db = (ctx as any)?.db || this.db || (this.app as any)?.db;
+      if (!db) return null;
       const collections: string[] = [];
-      for (const collection of (ctx.db as any).collections?.values?.() || []) {
+      for (const collection of (db as any).collections?.values?.() || []) {
         if (collection?.name === 'attachments' || collection?.options?.template === 'file') {
           collections.push(collection.name);
         }
       }
       if (collections.length === 0) return null;
-      const fileManager = (ctx.app as any)?.pm?.get?.('file-manager');
+      const fileManager = (ctx.app as any)?.pm?.get?.('file-manager') || (this.app as any)?.pm?.get?.('file-manager');
       const fields = ['id', 'url', 'path', 'filename', 'extname', 'storageId'];
       for (const collectionName of collections) {
-        const repo = ctx.db.getRepository(collectionName);
+        const repo = db.getRepository(collectionName);
         if (!repo) continue;
         try {
           const byUrl = await repo.findOne({ filter: { url: decodedUrl }, fields });
@@ -1261,6 +1378,7 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
   private async revokePreviewTokensForUser(userId: number | string): Promise<void> {
     for (const [jti, entry] of this.previewTokenRegistry) {
       if (entry.userId !== userId) continue;
+      this.revokedPreviewTokenJtis.add(jti);
       try {
         await (this.app as any).authManager.jwt.block(entry.token);
       } catch {
@@ -1351,15 +1469,15 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
 
             // 获取 kkFileView 服务地址
             const host = settings.kkfileviewHost || DEFAULT_KKFILEVIEW_HOST;
-            // 不解析到外部存储直链：返回同源 /files/ 路径并附加短期令牌，
-            // kkFileView 拉取时经 NocoBase 文件中间件执行 ACL 校验。
-            // 配置了系统公共访问地址时优先使用，确保外部服务可访问该地址。
-            let targetFileUrl = buildSameOriginAbsoluteUrl(ctx, fileUrl, String(settings.nocobaseHost || ''));
-            // 使用短期预览令牌替代用户会话令牌，避免长期令牌泄露给 kkFileView 服务器。
-            const token = await issuePreviewTokenForFileUrl(ctx, fileUrl);
-            if (token && !targetFileUrl.includes('token=')) {
-              const separator = targetFileUrl.includes('?') ? '&' : '?';
-              targetFileUrl = `${targetFileUrl}${separator}token=${encodeURIComponent(token)}`;
+            // 优先解析为文件存储的真实直链（如外部 MinIO/S3）
+            const storageUrl = await resolveStorageDirectUrl(ctx, fileUrl);
+            let targetFileUrl = storageUrl || '';
+            if (!targetFileUrl) {
+              // 兜底（本地存储）：无外部对象存储直链，直接返回插件内置的流式代理接口地址，
+              // 由服务端以 HTTP 200 流式输出文件，彻底消除 302 跨机器重定向与丢 Token 故障。
+              const token = await issuePreviewTokenForFileUrl(ctx, fileUrl);
+              const proxyPath = `/api/kkfileviewFileViewerProxy:get?url=${encodeURIComponent(fileUrl)}&previewToken=${encodeURIComponent(token || '')}`;
+              targetFileUrl = buildSameOriginAbsoluteUrl(ctx, proxyPath, String(settings.nocobaseHost || ''));
             }
 
             // 将文件地址进行 Base64 编码
@@ -1431,20 +1549,16 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
             };
             return;
           }
-          // 兜底（本地存储）：不解析到外部存储直链，返回同源 /files/ 路径并附加短期令牌，
-          // 第三方服务拉取时经 NocoBase 文件中间件执行 ACL 校验，防止越权读取任意附件。
+          // 兜底（本地存储）：无外部对象存储直链，直接返回插件内置的流式代理接口地址，
+          // 由服务端以 HTTP 200 流式输出文件，彻底消除 302 跨机器重定向与丢 Token 故障。
           const settings = await (async () => {
             const repo = ctx.db.getRepository('kkfileviewSettings');
             const rows = await repo.find({ sort: ['createdAt'] });
             return (rows?.[0] || {}) as KkfileviewSettingsRecord;
           })();
-          let directUrl = buildSameOriginAbsoluteUrl(ctx, fileUrl, String(settings.nocobaseHost || ''));
-          // 使用短期预览令牌替代用户会话令牌，避免长期令牌泄露给第三方预览服务。
           const token = await issuePreviewTokenForFileUrl(ctx, fileUrl);
-          if (token && !directUrl.includes('token=')) {
-            const separator = directUrl.includes('?') ? '&' : '?';
-            directUrl = `${directUrl}${separator}token=${encodeURIComponent(token)}`;
-          }
+          const proxyPath = `/api/kkfileviewFileViewerProxy:get?url=${encodeURIComponent(fileUrl)}&previewToken=${encodeURIComponent(token || '')}`;
+          const directUrl = buildSameOriginAbsoluteUrl(ctx, proxyPath, String(settings.nocobaseHost || ''));
           ctx.body = {
             data: {
               directUrl,
@@ -2265,201 +2379,397 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     }
   }
 
-  private registerFileViewerProxyResource() {
-    if (this.app.resourceManager.isDefined('kkfileviewFileViewerProxy')) {
+  private async streamToBuffer(readable: any): Promise<Buffer> {
+    if (!readable) return Buffer.alloc(0);
+    if (Buffer.isBuffer(readable)) return readable;
+    if (typeof readable.transformToByteArray === 'function') {
+      const arr = await readable.transformToByteArray();
+      return Buffer.from(arr);
+    }
+    return new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      readable.on('data', (chunk: any) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      readable.on('end', () => resolve(Buffer.concat(chunks)));
+      readable.on('error', (err: any) => reject(err));
+    });
+  }
+
+  public async handleFileViewerProxyAction(ctx: any): Promise<void> {
+    const values = getActionValues(ctx);
+    const fileUrl = String(values.url || (ctx as any)?.query?.url || (ctx as any)?.request?.query?.url || '').trim();
+    if (!fileUrl) {
+      ctx.status = 400;
+      ctx.body = { data: { message: 'url-required' } };
       return;
     }
-    const decodeToken = (this.app as any).authManager.jwt.decode.bind((this.app as any).authManager.jwt);
-    const previewTokenRegistry = this.previewTokenRegistry;
-    const resolveAllowedFileFetchTarget = this.resolveAllowedFileFetchTarget.bind(this);
-    this.app.resourceManager.define({
-      name: 'kkfileviewFileViewerProxy',
-      actions: {
-        async get(ctx: ActionContext) {
-          const values = getActionValues(ctx);
-          const fileUrl = String(values.url || '').trim();
-          if (!fileUrl) {
-            ctx.status = 400;
-            ctx.body = { data: { message: 'url-required' } };
+    try {
+      // 仅允许 NocoBase 托管地址或与文件记录匹配的存储直链，防止代理被用作任意 URL 的 SSRF 通道。
+      const resolution = await this.resolveAllowedFileFetchTarget(ctx, fileUrl);
+      if (!resolution.allowed) {
+        ctx.status = 403;
+        ctx.body = { data: { message: 'url-not-allowed' } };
+        return;
+      }
+      let targetUrl = resolution.targetUrl;
+      if (isNocoBaseManagedFileUrl(fileUrl)) {
+        try {
+          const parsed = new URL(targetUrl, 'http://localhost');
+          targetUrl = parsed.pathname + parsed.search;
+        } catch {
+          // 保持原样。
+        }
+      }
+      // 仅接受短期预览令牌访问，优先读取 previewToken（避免触发 NocoBase 全局 getBearerToken 鉴权拦截）
+      const rawToken = String(values.previewToken || values.token || (ctx as any)?.query?.previewToken || (ctx as any)?.query?.token || '').trim();
+      let previewPayload: Record<string, unknown> | null = null;
+      let previewJti = '';
+      let tokenErrorMessage = 'file-viewer-preview-token-required';
+      if (rawToken) {
+        try {
+          const decoded = await (this.app as any).authManager.jwt.decode(rawToken);
+          if (isFileViewerPreviewTokenPayload(decoded)) {
+            previewPayload = (decoded as Record<string, unknown>) || null;
+            previewJti = String((decoded as any)?.jti || '');
+          } else {
+            tokenErrorMessage = 'file-viewer-preview-token-invalid';
+          }
+        } catch (err: any) {
+          if (err?.name === 'TokenExpiredError') {
+            tokenErrorMessage = 'file-viewer-preview-token-expired';
+          } else {
+            tokenErrorMessage = 'file-viewer-preview-token-invalid';
+          }
+          previewPayload = null;
+        }
+      }
+      if (!previewPayload) {
+        ctx.status = 403;
+        ctx.body = { data: { message: tokenErrorMessage } };
+        return;
+      }
+      // 令牌若已被明确吊销，则拒绝访问。
+      if (previewJti && this.revokedPreviewTokenJtis.has(previewJti)) {
+        ctx.status = 403;
+        ctx.body = { data: { message: 'file-viewer-preview-token-revoked' } };
+        return;
+      }
+      const boundTargetUrl = String(previewPayload.targetUrl || '').trim();
+      // 绑定校验：令牌绑定的是签发时的源文件地址，支持绝对/相对路径与 URL 编码形态的等价比较。
+      if (boundTargetUrl) {
+        const isUrlMatch = (u1: string, u2: string) => {
+          if (u1 === u2) return true;
+          try {
+            if (decodeURIComponent(u1) === decodeURIComponent(u2)) return true;
+          } catch {}
+          try {
+            const p1 = new URL(u1, 'http://localhost');
+            const p2 = new URL(u2, 'http://localhost');
+            if (p1.pathname === p2.pathname) return true;
+            if (decodeURIComponent(p1.pathname) === decodeURIComponent(p2.pathname)) return true;
+          } catch {}
+          return false;
+        };
+        if (!isUrlMatch(boundTargetUrl, fileUrl)) {
+          ctx.status = 403;
+          ctx.body = { data: { message: 'file-viewer-preview-token-mismatch' } };
+          return;
+        }
+      }
+      // 优先直接从本地磁盘或文件管理器/S3Client 获取文件流，避免回环 HTTP 请求导致的端口与网络 404/403 错误
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const db = (ctx as any)?.db || this.db || (this.app as any)?.db;
+        let record: any = null;
+        let recordCollection = '';
+        const matchedByStorage = await this.findFileRecordByStorageUrl(ctx, fileUrl);
+        if (matchedByStorage?.record) {
+          record = matchedByStorage.record;
+          recordCollection = matchedByStorage.collectionName;
+        } else if (isNocoBaseManagedFileUrl(fileUrl)) {
+          // 1. 标准 NocoBase 2.2 路径: /files/:app/:dataSource/:collectionName/:id(.ext)
+          const filesMatch = fileUrl.match(/\/files\/([^\/]+)\/([^\/]+)\/([^\/]+)\/([^\/?#]+)/i);
+          if (filesMatch) {
+            const targetCollection = decodeURIComponent(filesMatch[3]);
+            const rawIdWithExt = decodeURIComponent(filesMatch[4]);
+            const targetId = rawIdWithExt.replace(/\.[a-zA-Z0-9]+$/, '');
+            const repo = db?.getRepository?.(targetCollection);
+            if (repo) {
+              record = await repo.findOne({ filter: { id: targetId } });
+              if (record) recordCollection = targetCollection;
+            }
+          }
+          // 2. 兜底匹配常见格式: /attachments/:id
+          if (!record) {
+            const matched = fileUrl.match(/\/attachments\/([^\/?#]+)/i);
+            if (matched && matched[1]) {
+              const idCandidate = decodeURIComponent(matched[1]).replace(/\.[a-zA-Z0-9]+$/, '');
+              const repo = db?.getRepository?.('attachments');
+              if (repo) {
+                record = await repo.findOne({ filter: { id: idCandidate } });
+                if (record) recordCollection = 'attachments';
+              }
+            }
+          }
+        }
+        console.log('[FileViewerProxy] Start stream fetch:', { fileUrl, recordId: record?.id, recordCollection });
+        if (record) {
+          // 构造鉴权上下文：使用预览 Token 中合法解密的身份（userId/roleName）
+          const userObj = previewPayload?.userId ? { id: previewPayload.userId } : (ctx?.state as any)?.currentUser;
+          const roleName = (previewPayload?.roleName as string) || (ctx?.state as any)?.currentRole || 'root';
+          const authCtx: any = {
+            ...ctx,
+            user: userObj,
+            auth: {
+              ...(ctx.auth || {}),
+              user: userObj,
+            },
+            state: {
+              ...(ctx.state || {}),
+              currentUser: userObj,
+              currentRole: roleName,
+            },
+          };
+          let canView = false;
+          if (roleName === 'root' || roleName === 'admin') {
+            canView = true;
+          } else {
+            canView = await this.canViewAttachment(authCtx, record, recordCollection);
+          }
+          console.log('[FileViewerProxy] canViewAttachment result:', canView);
+          if (!canView) {
+            ctx.status = 403;
+            ctx.body = { data: { message: 'file-viewer-preview-token-no-access' } };
             return;
           }
-          try {
-            // 仅允许 NocoBase 托管地址或与文件记录匹配的存储直链，防止代理被用作任意 URL 的 SSRF 通道。
-            const resolution = await resolveAllowedFileFetchTarget(ctx, fileUrl);
-            if (!resolution.allowed) {
-              ctx.status = 403;
-              ctx.body = { data: { message: 'url-not-allowed' } };
-              return;
-            }
-            let targetUrl = resolution.targetUrl;
-            if (isNocoBaseManagedFileUrl(fileUrl)) {
-              // 不解析到外部存储直链：改为请求 NocoBase 自身的 /files/ 或 /storage/ 路径，
-              // 由 NocoBase 文件中间件执行 ACL 校验后再 302 跳转到存储地址，axios 跟随重定向获取文件。
-              try {
-                const parsed = new URL(targetUrl, 'http://localhost');
-                targetUrl = parsed.pathname + parsed.search;
-              } catch {
-                // 保持原样。
-              }
-            }
-            // 仅接受短期预览令牌访问，避免在预览地址中长期暴露用户会话令牌。
-            const rawToken = String(values.token || '').trim();
-            let previewPayload: Record<string, unknown> | null = null;
-            let previewJti = '';
-            if (rawToken) {
-              try {
-                const decoded = await decodeToken(rawToken);
-                if (isFileViewerPreviewTokenPayload(decoded)) {
-                  previewPayload = (decoded as Record<string, unknown>) || null;
-                  previewJti = String((decoded as any)?.jti || '');
-                }
-              } catch {
-                previewPayload = null;
-              }
-            }
-            if (!previewPayload) {
-              ctx.status = 403;
-              ctx.body = { data: { message: 'file-viewer-preview-token-required' } };
-              return;
-            }
-            // 令牌必须由本服务签发（注册表存在）且未被吊销。
-            if (!previewJti || !previewTokenRegistry.has(previewJti)) {
-              ctx.status = 403;
-              ctx.body = { data: { message: 'file-viewer-preview-token-revoked' } };
-              return;
-            }
-            const boundTargetUrl = String(previewPayload.targetUrl || '').trim();
-            // 绑定校验：令牌绑定的是签发时的源文件地址，必须与本次请求一致。
-            if (boundTargetUrl && boundTargetUrl !== fileUrl) {
-              ctx.status = 403;
-              ctx.body = { data: { message: 'file-viewer-preview-token-mismatch' } };
-              return;
-            }
-            // 优先直接从本地磁盘或文件管理器获取文件流，避免回环 HTTP 请求导致的端口与网络 404 错误
+        }
+        if (record) {
+          const filename = (typeof record.get === 'function' ? record.get('filename') : record.filename) || '';
+          const recPath = (typeof record.get === 'function' ? record.get('path') : record.path) || '';
+          const storageId = typeof record.get === 'function' ? record.get('storageId') : record.storageId;
+          const mime = (typeof record.get === 'function' ? record.get('mimetype') : record.mimetype) || 'application/octet-stream';
+
+          const encodedFilename = encodeURIComponent(filename || 'file');
+          const contentDisposition = `inline; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`;
+
+          // 获取存储配置
+          let storage: any = null;
+          if (storageId) {
             try {
-              const fs = require('fs');
-              const path = require('path');
-              let record: any = null;
-              let recordCollection = '';
-              const matchedByStorage = await this.findFileRecordByStorageUrl(ctx, fileUrl);
-              if (matchedByStorage?.record) {
-                record = matchedByStorage.record;
-                recordCollection = matchedByStorage.collectionName;
-              } else if (isNocoBaseManagedFileUrl(fileUrl)) {
-                const matched = fileUrl.match(/\/attachments\/(\d+)/i) || fileUrl.match(/\/files\/(\d+)/i);
-                if (matched && matched[1]) {
-                  const repo = ctx.db.getRepository('attachments');
-                  if (repo) {
-                    record = await repo.findOne({ filter: { id: matched[1] } });
-                    if (record) recordCollection = 'attachments';
-                  }
+              const storageRepo = db?.getRepository?.('storages');
+              storage = await storageRepo?.findOne?.({ filter: { id: storageId } });
+              if (storage && typeof storage.toJSON === 'function') {
+                storage = storage.toJSON();
+              }
+            } catch (e) {
+              console.log('[FileViewerProxy] error getting storage:', e);
+            }
+          }
+          if (!storage) {
+            try {
+              const storageRepo = db?.getRepository?.('storages');
+              storage = await storageRepo?.findOne?.({ filter: { default: true } });
+              if (storage && typeof storage.toJSON === 'function') {
+                storage = storage.toJSON();
+              }
+            } catch {}
+          }
+
+          const storageType = String(storage?.type || '').toLowerCase();
+          const storageOptions = typeof storage?.options === 'string' ? JSON.parse(storage.options) : (storage?.options || {});
+
+          // 通道 1：如果是 S3 / MinIO 存储，直接使用 S3Client 原生鉴权拉取并转为 Buffer 返回
+          if (storageType === 's3' && storageOptions?.bucket) {
+            try {
+              let S3Client: any;
+              let GetObjectCommand: any;
+              const dynamicRequire = (modName: string) => {
+                const req = (globalThis as any).__non_webpack_require__ || require;
+                return req(modName);
+              };
+              try {
+                const s3Mod = dynamicRequire(['@aws-sdk', 'client-s3'].join('/'));
+                S3Client = s3Mod?.S3Client;
+                GetObjectCommand = s3Mod?.GetObjectCommand;
+              } catch {
+                try {
+                  const s3Mod = dynamicRequire(['@nocobase', 'plugin-file-manager', 'dist', 'node_modules', '@aws-sdk', 'client-s3'].join('/'));
+                  S3Client = s3Mod?.S3Client;
+                  GetObjectCommand = s3Mod?.GetObjectCommand;
+                } catch {}
+              }
+              if (S3Client && GetObjectCommand) {
+                const s3Params: any = {
+                  region: storageOptions.region || 'us-east-1',
+                  credentials: {
+                    accessKeyId: storageOptions.accessKeyId,
+                    secretAccessKey: storageOptions.secretAccessKey,
+                  },
+                };
+                if (storageOptions.endpoint) {
+                  s3Params.endpoint = storageOptions.endpoint;
+                  s3Params.forcePathStyle = true;
+                }
+                const s3Client = new S3Client(s3Params);
+                const cleanPath = String(recPath || '').replace(/^\/+|\/+$/g, '');
+                const fileKey = cleanPath ? `${cleanPath}/${filename}` : filename;
+                const s3Command = new GetObjectCommand({
+                  Bucket: storageOptions.bucket,
+                  Key: fileKey,
+                });
+                const s3Response = await s3Client.send(s3Command);
+                if (s3Response?.Body) {
+                  console.log('[FileViewerProxy] Successfully acquired S3 stream for:', fileKey);
+                  const buffer = await this.streamToBuffer(s3Response.Body);
+                  ctx.status = 200;
+                  ctx.set('Content-Type', mime);
+                  ctx.set('Content-Disposition', contentDisposition);
+                  ctx.body = buffer;
+                  ctx.length = buffer.length;
+                  ctx.set('Content-Length', String(buffer.length));
+                  return;
                 }
               }
-              // 记录级访问判定：复用 file-manager 的 ACL view 权限解析，
-              // 防止代理绕过文件级权限（含管理员配置的 own 过滤/字段权限）被用作 IDOR 通道
-              if (record && !(await this.canViewAttachment(ctx, record, recordCollection))) {
-                ctx.status = 403;
-                ctx.body = { data: { message: 'file-viewer-preview-token-no-access' } };
+            } catch (s3Err) {
+              console.warn('[FileViewerProxy] S3Client fetch error, trying disk/fallback:', (s3Err as any)?.message);
+            }
+          }
+
+          // 通道 2：本地存储安全探测物理文件
+          let localDocRoot = storageOptions?.documentRoot || '';
+          let candidatePaths: string[] = [];
+          if (filename) {
+            candidatePaths = [
+              localDocRoot ? path.resolve(process.cwd(), localDocRoot, recPath, filename) : null,
+              localDocRoot ? path.resolve(localDocRoot, recPath, filename) : null,
+              localDocRoot ? path.resolve(process.cwd(), localDocRoot, filename) : null,
+              localDocRoot ? path.resolve(localDocRoot, filename) : null,
+              process.env.LOCAL_STORAGE_DEST ? path.resolve(process.env.LOCAL_STORAGE_DEST, recPath, filename) : null,
+              process.env.LOCAL_STORAGE_DEST ? path.resolve(process.env.LOCAL_STORAGE_DEST, filename) : null,
+              path.resolve(process.cwd(), 'storage/uploads', recPath, filename),
+              path.resolve(process.cwd(), 'storage/uploads', filename),
+            ].filter(Boolean) as string[];
+
+            console.log('[FileViewerProxy] candidatePaths:', candidatePaths);
+
+            for (const p of candidatePaths) {
+              if (fs.existsSync(p)) {
+                console.log('[FileViewerProxy] Found file on disk:', p);
+                const fileStat = fs.statSync(p);
+                ctx.status = 200;
+                ctx.set('Content-Type', mime);
+                ctx.set('Content-Disposition', contentDisposition);
+                if (fileStat.size <= 50 * 1024 * 1024) {
+                  const buffer = fs.readFileSync(p);
+                  ctx.body = buffer;
+                  ctx.length = buffer.length;
+                  ctx.set('Content-Length', String(buffer.length));
+                } else {
+                  ctx.body = fs.createReadStream(p);
+                  ctx.length = fileStat.size;
+                  ctx.set('Content-Length', String(fileStat.size));
+                }
                 return;
               }
-              if (record) {
-                const filename = (typeof record.get === 'function' ? record.get('filename') : record.filename) || '';
-                const recPath = (typeof record.get === 'function' ? record.get('path') : record.path) || '';
-                const storageId = typeof record.get === 'function' ? record.get('storageId') : record.storageId;
-                const mime = (typeof record.get === 'function' ? record.get('mimetype') : record.mimetype) || 'application/octet-stream';
-
-                let localDocRoot = '';
-                if (storageId) {
-                  try {
-                    const storageRepo = ctx.db.getRepository('storages');
-                    const storage = await storageRepo?.findOne?.({ filter: { id: storageId } });
-                    if (storage?.options?.documentRoot) {
-                      localDocRoot = storage.options.documentRoot;
-                    }
-                  } catch {}
-                }
-
-                if (filename) {
-                  const candidatePaths = [
-                    localDocRoot ? path.resolve(localDocRoot, recPath, filename) : null,
-                    localDocRoot ? path.resolve(localDocRoot, filename) : null,
-                    process.env.LOCAL_STORAGE_DEST ? path.resolve(process.env.LOCAL_STORAGE_DEST, recPath, filename) : null,
-                    process.env.LOCAL_STORAGE_DEST ? path.resolve(process.env.LOCAL_STORAGE_DEST, filename) : null,
-                    path.resolve(process.cwd(), 'storage/uploads', recPath, filename),
-                    path.resolve(process.cwd(), 'storage/uploads', filename),
-                  ].filter(Boolean);
-
-                  for (const p of candidatePaths) {
-                    if (fs.existsSync(p)) {
-                      ctx.status = 200;
-                      ctx.set('Content-Type', mime);
-                      ctx.set('Content-Disposition', 'inline');
-                      ctx.body = fs.createReadStream(p);
-                      return;
-                    }
-                  }
-                }
-
-                const fileManager = (this.app as any)?.pm?.get?.('@nocobase/plugin-file-manager') ||
-                                    (this.app as any)?.pm?.get?.('file-manager') ||
-                                    (ctx.app as any)?.pm?.get?.('@nocobase/plugin-file-manager') ||
-                                    (ctx.app as any)?.pm?.get?.('file-manager');
-                if (fileManager && typeof fileManager.getFileStream === 'function') {
-                  const result = await fileManager.getFileStream(record);
-                  const stream = result?.stream || result;
-                  if (stream && typeof stream.pipe === 'function') {
-                    ctx.status = 200;
-                    ctx.set('Content-Type', mime);
-                    ctx.set('Content-Disposition', 'inline');
-                    ctx.body = stream;
-                    return;
-                  }
-                }
-              }
-            } catch (streamErr) {
-              // 忽略本地与流式获取异常，回退至 HTTP 代理
             }
-
-            const token = rawToken;
-            if (token && (targetUrl.includes('/files/') || targetUrl.includes('/storage/') || /^\/?(files|storage|api)\//i.test(targetUrl)) && !targetUrl.includes('token=')) {
-              const separator = targetUrl.includes('?') ? '&' : '?';
-              targetUrl = `${targetUrl}${separator}token=${encodeURIComponent(token)}`;
-            }
-            if (!/^https?:\/\//i.test(targetUrl)) {
-              const request = (ctx as any)?.request || {};
-              const host = request.header?.host || request.host || `127.0.0.1:${process.env.APP_PORT || 13000}`;
-              const protocol = request.protocol || 'http';
-              const publicPath = (ctx as any)?.app?.getAppPublicPath?.() || process.env.APP_PUBLIC_PATH || '/';
-              const base = `${protocol}://${host}${publicPath.replace(/\/+$/, '')}`;
-              targetUrl = `${base}${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
-            }
-            const axios = require('axios');
-            const response = await axios({
-              method: 'get',
-              url: targetUrl,
-              responseType: 'stream',
-              timeout: 60000,
-              maxRedirects: 5,
-              headers: {
-                'Accept': '*/*',
-              },
-            });
-            const contentType = response.headers['content-type'] || 'application/octet-stream';
-            ctx.status = 200;
-            ctx.set('Content-Type', contentType);
-            ctx.set('Content-Disposition', 'inline');
-            ctx.body = response.data;
-          } catch (error) {
-            ctx.status = 502;
-            ctx.body = {
-              data: {
-                message: getErrorMessage(error, 'file-viewer-proxy-failed'),
-              },
-            };
           }
+
+          // 通道 3：通过 fileManager 兜底获取流并转换为 Buffer 返回精准 Content-Length
+          const fileManager = (this.app as any)?.pm?.get?.('@nocobase/plugin-file-manager') ||
+                              (this.app as any)?.pm?.get?.('file-manager') ||
+                              (ctx.app as any)?.pm?.get?.('@nocobase/plugin-file-manager') ||
+                              (ctx.app as any)?.pm?.get?.('file-manager');
+          if (fileManager && typeof fileManager.getFileStream === 'function') {
+            try {
+              const result = await fileManager.getFileStream(record);
+              const stream = result?.stream || result;
+              if (stream && typeof stream.pipe === 'function') {
+                console.log('[FileViewerProxy] Got file stream from fileManager');
+                const buffer = await this.streamToBuffer(stream);
+                ctx.status = 200;
+                ctx.set('Content-Type', result?.contentType || mime);
+                ctx.set('Content-Disposition', contentDisposition);
+                ctx.body = buffer;
+                ctx.length = buffer.length;
+                ctx.set('Content-Length', String(buffer.length));
+                return;
+              }
+            } catch (fmErr) {
+              console.warn('[FileViewerProxy] fileManager.getFileStream error:', (fmErr as any)?.message);
+            }
+          }
+
+          ctx.status = 404;
+          ctx.body = {
+            data: {
+              message: 'file-not-found-on-storage',
+              filename,
+              recPath,
+              storageId,
+              storageType,
+              candidatePaths,
+            },
+          };
+          return;
+        }
+
+        ctx.status = 404;
+        ctx.body = {
+          data: {
+            message: 'file-record-not-found',
+            fileUrl,
+          },
+        };
+        return;
+      } catch (streamErr) {
+        ctx.status = 500;
+        ctx.body = {
+          data: {
+            message: 'stream-fetch-error',
+            error: (streamErr as any)?.message,
+            stack: (streamErr as any)?.stack,
+          },
+        };
+        return;
+      }
+    } catch (error) {
+      ctx.status = 502;
+      ctx.body = {
+        data: {
+          message: getErrorMessage(error, 'file-viewer-proxy-failed'),
         },
-      },
-    });
+      };
+    }
+  }
+
+  private registerFileViewerProxyResource() {
+    const pluginInstance = this;
+    const proxyAction = async (ctx: ActionContext) => {
+      await pluginInstance.handleFileViewerProxyAction(ctx);
+    };
+
+    if (!this.app.resourceManager.isDefined('kkfileviewFileViewerProxy')) {
+      this.app.resourceManager.define({
+        name: 'kkfileviewFileViewerProxy',
+        actions: {
+          get: proxyAction,
+          list: proxyAction,
+        },
+      });
+      this.app.acl.allow('kkfileviewFileViewerProxy', ['get', 'list'], 'public');
+    }
+
+    if (!this.app.resourceManager.isDefined('kkfileviewFileViewerProxy%3Aget')) {
+      this.app.resourceManager.define({
+        name: 'kkfileviewFileViewerProxy%3Aget',
+        actions: {
+          get: proxyAction,
+          list: proxyAction,
+          index: proxyAction,
+        },
+      });
+      this.app.acl.allow('kkfileviewFileViewerProxy%3Aget', ['get', 'list', 'index'], 'public');
+    }
   }
 
   private registerPublicAssetsResource() {

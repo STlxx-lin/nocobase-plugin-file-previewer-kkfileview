@@ -104,6 +104,7 @@ export function buildFileViewerProxyUrl(fileUrl: string, token?: string | null, 
   const params = new URLSearchParams();
   params.set('url', rawUrl);
   if (token) {
+    params.set('previewToken', token);
     params.set('token', token);
   }
   const relativeUrl = `${apiBase}/${FILE_VIEWER_PROXY_PATH_KEYWORD}:get?${params.toString()}`;

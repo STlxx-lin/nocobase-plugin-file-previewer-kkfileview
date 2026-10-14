@@ -11,25 +11,26 @@ export const FILE_VIEWER_PREVIEW_TOKEN_AUDIENCE = 'kkfileview-preview';
 /** File Viewer 预览令牌的作用域标识。 */
 export const FILE_VIEWER_PREVIEW_TOKEN_SCOPE = 'file-viewer';
 
-/** File Viewer 预览令牌默认有效期。 */
-export const FILE_VIEWER_PREVIEW_TOKEN_DEFAULT_EXPIRES_IN = '10m';
+/** File Viewer 预览令牌默认有效期（2小时）。 */
+export const FILE_VIEWER_PREVIEW_TOKEN_DEFAULT_EXPIRES_IN = '2h';
 
 /** File Viewer 预览令牌允许的最短有效期（秒）。 */
 const PREVIEW_TOKEN_MIN_SECONDS = 60;
 
-/** File Viewer 预览令牌允许的最长有效期（秒）。 */
-const PREVIEW_TOKEN_MAX_SECONDS = 30 * 60;
+/** File Viewer 预览令牌允许的最长有效期（秒，24小时）。 */
+const PREVIEW_TOKEN_MAX_SECONDS = 24 * 3600;
 
 /**
  * 解析 File Viewer 预览令牌的有效期。
  * 优先读取环境变量 KKFILEVIEW_PREVIEW_TOKEN_EXPIRES_IN，
- * 仅接受 `n`（秒）或 `nm`（分钟）格式，并限制在 1m ~ 30m 之间，
- * 超出范围或格式非法时回退到默认值。
+ * 接受 `ns`（秒）、`nm`（分钟）或 `nh`（小时）格式，并限制在 1m ~ 24h 之间，
+ * 超出范围或格式非法时回退到默认值 2h。
  */
 export function getPreviewTokenExpiresIn(rawValue: string = ''): string {
   const value = String(rawValue || process.env.KKFILEVIEW_PREVIEW_TOKEN_EXPIRES_IN || FILE_VIEWER_PREVIEW_TOKEN_DEFAULT_EXPIRES_IN).trim();
-  const matched = /^(\d+)([sm])$/.exec(value);
-  const seconds = matched ? Number(matched[1]) * (matched[2] === 'm' ? 60 : 1) : Number.NaN;
+  const matched = /^(\d+)([smh])$/.exec(value);
+  const multiplier = matched ? (matched[2] === 'h' ? 3600 : matched[2] === 'm' ? 60 : 1) : 1;
+  const seconds = matched ? Number(matched[1]) * multiplier : Number.NaN;
   if (!Number.isFinite(seconds) || seconds < PREVIEW_TOKEN_MIN_SECONDS || seconds > PREVIEW_TOKEN_MAX_SECONDS) {
     return FILE_VIEWER_PREVIEW_TOKEN_DEFAULT_EXPIRES_IN;
   }
@@ -37,13 +38,14 @@ export function getPreviewTokenExpiresIn(rawValue: string = ''): string {
 }
 
 /**
- * 将有效期字符串（`n` 秒 / `nm` 分钟）转换为毫秒。
- * 格式非法时回退到默认 10 分钟，供服务端计算过期时间兜底。
+ * 将有效期字符串（`ns` 秒 / `nm` 分钟 / `nh` 小时）转换为毫秒。
+ * 格式非法时回退到默认 2 小时，供服务端计算过期时间兜底。
  */
 export function parsePreviewTokenExpiresInToMs(expiresIn: string = ''): number {
-  const matched = /^(\d+)([sm])$/.exec(String(expiresIn || '').trim());
-  if (!matched) return 10 * 60 * 1000;
-  const seconds = Number(matched[1]) * (matched[2] === 'm' ? 60 : 1);
+  const matched = /^(\d+)([smh])$/.exec(String(expiresIn || '').trim());
+  if (!matched) return 2 * 3600 * 1000;
+  const multiplier = matched[2] === 'h' ? 3600 : matched[2] === 'm' ? 60 : 1;
+  const seconds = Number(matched[1]) * multiplier;
   return seconds * 1000;
 }
 

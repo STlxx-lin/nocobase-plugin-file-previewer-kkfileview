@@ -74,6 +74,45 @@ describe('fileViewerRuntime', () => { // 定义 fileViewer 运行时工具测试
     }); // 结束 downloaded 标志测试。
   }); // 结束 CDN 模式专项分组。
 
+  describe('loadMode 控制（CDN 模式 vs 静态模式）', () => {
+    it('当 loadMode === "cdn" 时，即便 downloaded 为 true，也严格返回 npmmirror CDN 地址', () => {
+      vi.stubGlobal('window', {
+        location: { origin: 'http://localhost:13000' },
+      } as Window);
+      vi.stubEnv('BUILD_FULL', '');
+
+      expect(resolveFileViewerAssetBase('', true, 'cdn')).toBe(
+        'https://registry.npmmirror.com/@file-viewer/web-full/2.2.2/files/dist/',
+      );
+    });
+
+    it('当 loadMode === "proxy"（静态模式）且 downloaded 为 true 时，返回本地静态文件路径', () => {
+      vi.stubGlobal('window', {
+        location: { origin: 'http://localhost:13000' },
+      } as Window);
+      vi.stubEnv('BUILD_FULL', '');
+
+      expect(resolveFileViewerAssetBase('', true, 'proxy')).toBe(
+        'http://localhost:13000/api/kkfileviewPublicAssets/file-viewer/',
+      );
+    });
+
+    it('当 loadMode === "proxy"（静态模式）但 downloaded 为 false 且非全量包时，自动回退到公共 CDN 地址', () => {
+      vi.stubGlobal('window', {
+        location: { origin: 'http://localhost:13000' },
+      } as Window);
+      vi.stubEnv('BUILD_FULL', '');
+
+      expect(resolveFileViewerAssetBase('', false, 'proxy')).toBe(
+        'https://registry.npmmirror.com/@file-viewer/web-full/2.2.2/files/dist/',
+      );
+    });
+
+    it('无论 loadMode 为何，只要显式配置了自定义 rawBase，均优先保留自定义地址', () => {
+      expect(resolveFileViewerAssetBase('/my-assets/file-viewer/', true, 'cdn')).toBe('/my-assets/file-viewer/');
+    });
+  });
+
   it('should preserve explicit configured asset base', () => { // 验证显式配置存在时保留该配置。
     expect(resolveFileViewerAssetBase('/custom/file-viewer/')).toBe('/custom/file-viewer/'); // 断言已规范化的显式地址会被原样保留。
     expect(resolveFileViewerAssetBase('/custom/file-viewer')).toBe('/custom/file-viewer/'); // 断言缺失尾部斜杠的显式地址会被自动补齐。

@@ -37,7 +37,7 @@ describe('getPreviewTokenExpiresIn', () => {
   });
 
   it('超出上限时回退到默认值', () => {
-    expect(getPreviewTokenExpiresIn('60m')).toBe(FILE_VIEWER_PREVIEW_TOKEN_DEFAULT_EXPIRES_IN);
+    expect(getPreviewTokenExpiresIn('25h')).toBe(FILE_VIEWER_PREVIEW_TOKEN_DEFAULT_EXPIRES_IN);
   });
 
   it('低于下限时回退到默认值', () => {
@@ -71,6 +71,16 @@ describe('buildFileViewerPreviewTokenPayload', () => {
     const payload = buildFileViewerPreviewTokenPayload(1, { targetUrl: '' });
     expect(payload.roleName).toBeUndefined();
     expect(payload.targetUrl).toBe('');
+  });
+
+  it('支持写入 roles 角色数组与 __union__ 模式', () => {
+    const payload = buildFileViewerPreviewTokenPayload(2, {
+      roleName: '__union__',
+      roles: ['role_a', 'role_b', 'role_a', ''],
+      targetUrl: '/files/main/main/attachments/test.docx',
+    });
+    expect(payload.roleName).toBe('__union__');
+    expect(payload.roles).toEqual(['role_a', 'role_b']);
   });
 });
 
@@ -134,11 +144,17 @@ describe('isNocoBaseManagedFileUrl', () => {
     expect(isNocoBaseManagedFileUrl('https://cdn.example.com/demo.pdf')).toBe(false);
   });
 
-  it('拒绝畸形或空输入', () => {
+  it('接受带有 UUID、字符串主键或带 /api 前缀的 /files/ 路径', () => {
+    expect(isNocoBaseManagedFileUrl('/files/main/main/attachments/abc.pdf')).toBe(true);
+    expect(isNocoBaseManagedFileUrl('/files/main/main/attachments/fdd1b023-7a24-4bc5-8e2a-112233445566.docx')).toBe(true);
+    expect(isNocoBaseManagedFileUrl('http://localhost:13000/api/files/main/main/attachments/uuid-test.xlsx')).toBe(true);
+  });
+
+  it('拒绝畸形、路径穿越或空输入', () => {
     expect(isNocoBaseManagedFileUrl('')).toBe(false);
     expect(isNocoBaseManagedFileUrl(null)).toBe(false);
     expect(isNocoBaseManagedFileUrl('/files/main/main/attachments')).toBe(false);
-    expect(isNocoBaseManagedFileUrl('/files/main/main/attachments/abc.pdf')).toBe(false);
+    expect(isNocoBaseManagedFileUrl('/files/main/main/attachments/../../etc/passwd')).toBe(false);
   });
 });
 
@@ -148,8 +164,8 @@ describe('parsePreviewTokenExpiresInToMs', () => {
     expect(parsePreviewTokenExpiresInToMs('300s')).toBe(300 * 1000);
   });
 
-  it('非法格式回退到默认 10 分钟', () => {
-    expect(parsePreviewTokenExpiresInToMs('')).toBe(10 * 60 * 1000);
-    expect(parsePreviewTokenExpiresInToMs('forever')).toBe(10 * 60 * 1000);
+  it('非法格式回退到默认 2 小时', () => {
+    expect(parsePreviewTokenExpiresInToMs('')).toBe(2 * 3600 * 1000);
+    expect(parsePreviewTokenExpiresInToMs('forever')).toBe(2 * 3600 * 1000);
   });
 });

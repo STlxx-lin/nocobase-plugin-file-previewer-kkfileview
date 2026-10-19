@@ -59,19 +59,36 @@ export function parsePreviewTokenExpiresInToMs(expiresIn: string = ''): number {
 export function isNocoBaseManagedFileUrl(url: unknown): boolean {
   const raw = String(url || '').trim();
   if (!raw) return false;
+  // 防御路径遍历
+  if (raw.includes('..')) return false;
+
   let pathname = raw;
   try {
     pathname = new URL(raw, 'http://localhost').pathname;
   } catch {
     // 无法解析时按原值处理。
   }
+
+  // 提取路径段，兼容可选的 /api 前缀（如 /api/files/... 或 /api/storage/...）
   const segments = pathname.replace(/^\/+/, '').split('/').filter(Boolean);
-  if (segments.length >= 5 && segments[0] === 'files' && /^\d+(\.\w+)?$/.test(segments[4] || '')) {
-    return true;
+  if (segments[0] === 'api') {
+    segments.shift();
   }
+
+  // 1. 永久文件路径：/files/{appName}/{dataSourceKey}/{collectionName}/{id}(.ext)
+  // 放宽对 ID 的纯数字限制，支持 UUID、NanoID 与字母数字下划线等合法标识符
+  if (segments.length >= 5 && segments[0] === 'files') {
+    const fileIdWithExt = segments[4] || '';
+    if (/^[a-zA-Z0-9_\-\.]+(\.[a-zA-Z0-9]+)?$/.test(fileIdWithExt)) {
+      return true;
+    }
+  }
+
+  // 2. 本地存储路径：/storage/...
   if (segments.length >= 2 && segments[0] === 'storage') {
     return true;
   }
+
   return false;
 }
 
@@ -81,7 +98,7 @@ export function isNocoBaseManagedFileUrl(url: unknown): boolean {
  */
 export function buildFileViewerPreviewTokenPayload(
   userId: number | string,
-  options: { roleName?: string; targetUrl: string },
+  options: { roleName?: string; roles?: string[]; targetUrl: string },
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     userId,
@@ -91,6 +108,12 @@ export function buildFileViewerPreviewTokenPayload(
   };
   if (options.roleName) {
     payload.roleName = String(options.roleName).trim();
+  }
+  if (Array.isArray(options.roles)) {
+    const roles = Array.from(new Set(options.roles.map((r) => String(r || '').trim()).filter(Boolean)));
+    if (roles.length > 0) {
+      payload.roles = roles;
+    }
   }
   return payload;
 }

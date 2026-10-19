@@ -50,6 +50,7 @@ export type FileViewerRendererProps = { // 导出 File Viewer 渲染组件属性
   /** 可选：调用方提供的认证下载函数，用于让库通过认证渠道获取受保护的文件内容。 */
   fetchFile?: FileViewerFetchFileFn; // 声明可选的认证下载函数属性。
   fileViewerDownloaded?: boolean; // 声明是否已下载本地依赖属性。
+  loadMode?: 'cdn' | 'proxy'; // 声明加载模式：'cdn' 强制走 CDN，'proxy' 静态模式优先走本地。
   onReady?: () => void; // 声明加载成功回调属性。
   onError?: (error: Error) => void; // 声明加载失败回调属性。
   onProgress?: (percent: number) => void; // 声明可选的加载进度回调属性。
@@ -164,7 +165,7 @@ function loadScriptWithProgress(src: string, onProgress?: (percent: number) => v
 }
 
 export function FileViewerRenderer(props: FileViewerRendererProps) { // 导出 File Viewer 渲染组件。
-  const { assetBase, fileUrl, fileName, watermark, watermarkOpacity, watermarkRotate, watermarkColor, styleIsolation, enableDownload, toolbarPosition, fetchFile, fileViewerDownloaded, onReady, onError, onProgress } = props; // 解构组件所需的核心属性与回调。
+  const { assetBase, fileUrl, fileName, watermark, watermarkOpacity, watermarkRotate, watermarkColor, styleIsolation, enableDownload, toolbarPosition, fetchFile, fileViewerDownloaded, loadMode, onReady, onError, onProgress } = props; // 解构组件所需的核心属性与回调。
   const hostRef = useRef<HTMLDivElement>(null); // 创建宿主容器引用以供挂载 Viewer。
 
   const fetchFileRef = useRef(fetchFile);
@@ -190,7 +191,7 @@ export function FileViewerRenderer(props: FileViewerRendererProps) { // 导出 F
 
     const mount = async () => { // 定义异步挂载流程。
       try { // 捕获动态加载或挂载过程中的运行异常。
-        const resolvedAssetBase = resolveFileViewerAssetBase(assetBase, fileViewerDownloaded); // 解析最终生效 of 资源基址。
+        const resolvedAssetBase = resolveFileViewerAssetBase(assetBase, fileViewerDownloaded, loadMode); // 解析最终生效 of 资源基址。
 
         // 动态加载 UMD/IIFE 打包好的静态 JS 资源，而不是由打包器静态编译，以绕过打包器编译错误。
         // 本地静态资源（/api/kkfileviewPublicAssets/）不可用时自动回退到公共 CDN。
@@ -323,7 +324,7 @@ export function FileViewerRenderer(props: FileViewerRendererProps) { // 导出 F
       disposed = true; // 标记组件已卸载，阻止异步流程继续更新状态。
       cleanupViewerController(controller, host); // 调用统一清理工具释放控制器与宿主 DOM。
     }; // 结束 effect 清理逻辑定义。
-  }, [assetBase, fileUrl, fileName, watermark, enableDownload, toolbarPosition, fileViewerDownloaded]); // 仅在影响挂载结果的依赖变化时重建 Viewer。
+  }, [assetBase, fileUrl, fileName, watermark, enableDownload, toolbarPosition, fileViewerDownloaded, loadMode]); // 仅在影响挂载结果的依赖变化时重建 Viewer。
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>

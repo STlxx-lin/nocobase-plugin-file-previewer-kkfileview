@@ -298,7 +298,25 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
       }
       const resp = await fetch(targetUrl, { headers, signal });
       if (!resp.ok) {
-        throw new Error(`Fetch file failed with status ${resp.status}`);
+        let errorDetail = '';
+        let serverMessage = '';
+        try {
+          const text = await resp.clone().text();
+          errorDetail = text.slice(0, 500);
+          try {
+            const parsed = JSON.parse(text);
+            serverMessage = parsed?.data?.message || parsed?.message || (Array.isArray(parsed?.errors) ? parsed.errors[0]?.message : '');
+          } catch {}
+        } catch {}
+        const finalMessage = serverMessage || errorDetail || resp.statusText;
+        console.error('[fileViewer] fetch file failed details:', {
+          targetUrl,
+          status: resp.status,
+          statusText: resp.statusText,
+          serverMessage,
+          responseBody: errorDetail,
+        });
+        throw new Error(`Fetch file failed with status ${resp.status}${finalMessage ? `: ${finalMessage}` : ''}`);
       }
       return await resp.arrayBuffer();
     } catch (e) {
@@ -881,7 +899,8 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
       if (popup) {
         const resolvedAssetBase = resolveFileViewerAssetBase(
           serviceConfigMap.fileViewer.host,
-          kkfileviewConfig.fileViewerDownloaded
+          kkfileviewConfig.fileViewerDownloaded,
+          kkfileviewConfig.fileViewerLoadMode,
         );
         const scriptUrls = buildFileViewerScriptUrls(resolvedAssetBase);
         const safeScriptUrls = safeScriptJson(scriptUrls);
@@ -1325,6 +1344,7 @@ export const BaseKKFilePreviewer = (props: BasePreviewerProps) => {
                     enableDownload={kkfileviewConfig.enableDownload !== false}
                     assetBase={serviceConfigMap.fileViewer.host}
                     fileViewerDownloaded={Boolean(kkfileviewConfig.fileViewerDownloaded)}
+                    loadMode={kkfileviewConfig.fileViewerLoadMode}
                     fetchFile={kkfileviewConfig.fileViewerLoadMode === 'cdn' ? undefined : fetchFileWithAuth}
                     onReady={() => {
                       iframeLoadedRef.current = true;

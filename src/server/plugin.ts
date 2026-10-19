@@ -1332,9 +1332,33 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     const userId = (currentUser as any)?.id;
     if (!userId) return null;
     const roleName = typeof (ctx as any)?.state?.currentRole === 'string' ? (ctx as any).state.currentRole : undefined;
+    const rolesSet = new Set<string>();
+    const stateCurrentRoles = (ctx as any)?.state?.currentRoles;
+    if (Array.isArray(stateCurrentRoles)) {
+      stateCurrentRoles.forEach((r) => {
+        if (typeof r === 'string' && r.trim()) rolesSet.add(r.trim());
+      });
+    }
+    const userRoles = Array.isArray((currentUser as any)?.roles) ? (currentUser as any).roles : [];
+    userRoles.forEach((r: any) => {
+      if (typeof r === 'string' && r.trim()) {
+        rolesSet.add(r.trim());
+      } else if (r && typeof r === 'object') {
+        const name = String(r.name || r.roleName || '').trim();
+        if (name) rolesSet.add(name);
+      }
+    });
+    if (roleName && roleName !== '__union__') {
+      rolesSet.add(roleName);
+    }
+    if (this.isAdminUser(currentUser)) {
+      rolesSet.add('admin');
+    }
+    const roles = Array.from(rolesSet);
     const expiresIn = getPreviewTokenExpiresIn();
     const payload = buildFileViewerPreviewTokenPayload(userId, {
       roleName,
+      roles,
       targetUrl: fileUrl,
     });
     const token = (this.app as any).authManager.jwt.sign(payload, {
@@ -2514,27 +2538,66 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
         }
         console.log('[FileViewerProxy] Start stream fetch:', { fileUrl, recordId: record?.id, recordCollection });
         if (record) {
-          // 构造鉴权上下文：使用预览 Token 中合法解密的身份（userId/roleName）
-          const userObj = previewPayload?.userId ? { id: previewPayload.userId } : (ctx?.state as any)?.currentUser;
+          // 构造鉴权上下文：使用预览 Token 中合法解密的身份（userId/roleName/roles）
+          const userObj: any = previewPayload?.userId ? { id: previewPayload.userId } : (ctx?.state as any)?.currentUser;
           const roleName = (previewPayload?.roleName as string) || (ctx?.state as any)?.currentRole || 'root';
-          const authCtx: any = {
-            ...ctx,
-            user: userObj,
-            auth: {
-              ...(ctx.auth || {}),
-              user: userObj,
-            },
-            state: {
-              ...(ctx.state || {}),
-              currentUser: userObj,
-              currentRole: roleName,
-            },
-          };
+          const tokenRoles = Array.isArray(previewPayload?.roles) ? (previewPayload.roles as string[]) : [];
+
+          // 快速管理员放行判定：支持 root / admin 字符串判断及角色列表中包含管理员的情况
+          const hasAdminRole =
+            roleName === 'root' ||
+            roleName === 'admin' ||
+            tokenRoles.includes('root') ||
+            tokenRoles.includes('admin');
+
           let canView = false;
-          if (roleName === 'root' || roleName === 'admin') {
+          if (hasAdminRole) {
             canView = true;
           } else {
-            canView = await this.canViewAttachment(authCtx, record, recordCollection);
+            // 计算有效角色列表，排除虚拟的 __union__ 占位符
+            let effectiveRoles = tokenRoles.filter((r) => Boolean(r) && r !== '__union__');
+            if (effectiveRoles.length === 0 && roleName && roleName !== '__union__') {
+              effectiveRoles = [roleName];
+            }
+            // 兜底：如果 effectiveRoles 仍为空（例如旧版本签发的 Token），尝试从数据库查询该用户的分配角色
+            if (effectiveRoles.length === 0 && userObj?.id) {
+              try {
+                const roleUsers = await db?.getRepository?.('rolesUsers')?.find({
+                  filter: { userId: userObj.id },
+                  raw: true,
+                });
+                if (Array.isArray(roleUsers) && roleUsers.length > 0) {
+                  effectiveRoles = roleUsers.map((ru: any) => String(ru.roleName || '')).filter(Boolean);
+                }
+              } catch {
+                // 忽略数据库查询失败
+              }
+            }
+
+            // 再次检查查出的有效角色中是否包含管理员角色
+            if (effectiveRoles.includes('root') || effectiveRoles.includes('admin')) {
+              canView = true;
+            } else {
+              const finalRoles = effectiveRoles.length > 0 ? effectiveRoles : ['anonymous'];
+              if (userObj) {
+                userObj.roles = finalRoles.map((r) => ({ name: r }));
+              }
+              const authCtx: any = {
+                ...ctx,
+                user: userObj,
+                auth: {
+                  ...(ctx.auth || {}),
+                  user: userObj,
+                },
+                state: {
+                  ...(ctx.state || {}),
+                  currentUser: userObj,
+                  currentRole: roleName,
+                  currentRoles: finalRoles,
+                },
+              };
+              canView = await this.canViewAttachment(authCtx, record, recordCollection);
+            }
           }
           console.log('[FileViewerProxy] canViewAttachment result:', canView);
           if (!canView) {

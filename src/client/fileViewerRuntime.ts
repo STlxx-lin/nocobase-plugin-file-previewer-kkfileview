@@ -40,7 +40,11 @@ export function buildFileViewerScriptUrls(primaryBase: string): string[] {
   return [primaryUrl, `${FILE_VIEWER_CDN_DIST_BASE}${FILE_VIEWER_SCRIPT_NAME}`];
 }
 
-export function resolveFileViewerAssetBase(rawBase: string = '', downloaded: boolean = false) { // 导出 File Viewer 资源基址解析函数。
+export function resolveFileViewerAssetBase(
+  rawBase: string = '',
+  downloaded: boolean = false,
+  loadMode?: 'cdn' | 'proxy',
+) { // 导出 File Viewer 资源基址解析函数。
   let explicit = String(rawBase || '').trim(); // 读取并清理显式传入的资源基础路径。
   if (explicit) { // 当存在显式配置时优先使用显式配置。
     // 如果配置中存有旧的 unpkg.com 地址，在国内网络下会被墙，自动将其升级替换为 npmmirror 阿里镜像
@@ -53,7 +57,13 @@ export function resolveFileViewerAssetBase(rawBase: string = '', downloaded: boo
     return ensureTrailingSlash(explicit); // 返回补齐末尾斜杠后的显式资源路径。
   } // 结束显式配置优先分支。
 
-  // 零配置默认兜底路径：根据构建版本类型（由 BUILD_FULL 决定）或本地提取状态（由 downloaded 决定）决定是使用本地内置资源还是公共 CDN
+  // 当显式设置为 CDN 模式时，即使本地已下载静态资源，也严格使用公共 CDN
+  if (loadMode === 'cdn') {
+    return FILE_VIEWER_CDN_DIST_BASE;
+  }
+
+  // 静态模式（loadMode === 'proxy'）或未指定模式时的兜底：
+  // 根据构建版本类型（由 BUILD_FULL 决定）或本地提取状态（由 downloaded 决定）决定是使用本地内置资源还是公共 CDN
   const isBuildFull = typeof process !== 'undefined' && Boolean(process.env?.BUILD_FULL);
   if (isBuildFull || downloaded) {
     const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
@@ -61,6 +71,6 @@ export function resolveFileViewerAssetBase(rawBase: string = '', downloaded: boo
     return new URL('api/kkfileviewPublicAssets/file-viewer/', base).toString();
   }
 
-  // 默认使用国内极速 npmmirror (阿里 npm 镜像 CDN)，无需梯子即可秒级加载
+  // 默认或本地静态资源不存在时，回退到国内极速 npmmirror (阿里 npm 镜像 CDN)
   return FILE_VIEWER_CDN_DIST_BASE;
 } // 结束 File Viewer 资源基址解析函数定义。

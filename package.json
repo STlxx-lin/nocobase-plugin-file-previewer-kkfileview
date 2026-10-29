@@ -7,20 +7,36 @@
   "homepage": "https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview",
   "homepage.zh-CN": "https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview",
   "version": "0.8.13",
-  "main": "dist/server/index.js",
-  "client": "dist/client/index.js",
+  "main": "server.js",
+  "client": "client.js",
+  "client-v2": "client-v2.js",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "server.js",
+    "server.d.ts",
+    "client.js",
+    "client.d.ts",
+    "client-v2.js",
+    "client-v2.d.ts",
+    "package.json",
+    "README.md",
+    "README_EN.md",
+    "LICENSE",
+    "public"
+  ],
   "nocobase": {
     "supportedVersions": [
       "2.x"
     ]
   },
-  "private": true,
   "scripts": {
     "check:locale": "node scripts/check-locale-keys.js",
     "pack-all": "node scripts/pack-all.js"
   },
   "dependencies": {
     "@file-viewer/web-full": "^2.2.2",
+    "fs-extra": "^11.2.0",
     "js-base64": "^3.7.8"
   },
   "peerDependencies": {
@@ -28,5 +44,17 @@
     "@nocobase/plugin-file-manager": "2.2.10",
     "@nocobase/server": "2.2.10",
     "@nocobase/test": "2.2.10"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/STlxx-lin/nocobase-plugin-file-previewer-kkfileview.git"
+  },
+  "keywords": [
+    "nocobase",
+    "nocobase-plugin",
+    "file-preview",
+    "kkfileview",
+    "basemetas",
+    "file-viewer"
+  ]
 }

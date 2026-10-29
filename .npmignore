@@ -1,7 +1,13 @@
 /node_modules
 /src
 /docs
-/docs/images
+/storage
+*.log
 *.tgz
 *.zip
 .github
+.git
+.mimosa
+.trae
+.vscode
+.zcode

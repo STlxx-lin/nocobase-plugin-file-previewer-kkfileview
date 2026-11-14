@@ -502,9 +502,6 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     this.app.acl.allow('kkfileviewFileViewerDownload', ['download', 'progress'], 'admin');
     this.app.acl.allow('kkfileviewFileViewerProxy', ['get', 'list'], 'public');
     this.app.acl.allow('kkfileviewFileViewerProxy%3Aget', ['get', 'list', 'index'], 'public');
-
-    await this.db.sync({ force: false, alter: { drop: false } });
-    await this.ensureDefaultRecord();
   }
 
   private registerSettingsSaveResource() {
@@ -1033,11 +1030,33 @@ export class PluginFilePreviewerKkfileviewServer extends Plugin {
     });
   }
 
+  /** 仅同步本插件自身的 3 张数据表结构，避免全库 db.sync 在启动阶段引发 DDL 锁等待。 */
+  private async syncPluginCollections() {
+    const collectionNames = [
+      'kkfileviewSettings',
+      'kkfileviewModificationRecordItems',
+      'kkfileviewPreviewRecordItems',
+    ];
+    for (const name of collectionNames) {
+      const collection = this.db.getCollection(name);
+      if (collection && typeof collection.sync === 'function') {
+        await collection.sync({ force: false, alter: { drop: false } });
+      }
+    }
+  }
+
   async install() {
+    await this.syncPluginCollections();
+    await this.ensureDefaultRecord();
+  }
+
+  async upgrade() {
+    await this.syncPluginCollections();
     await this.ensureDefaultRecord();
   }
 
   async afterEnable() {
+    await this.syncPluginCollections();
     await this.ensureDefaultRecord();
   }
 
